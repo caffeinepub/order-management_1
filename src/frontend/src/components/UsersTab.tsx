@@ -34,6 +34,7 @@ import { Loader2, Plus, Shield, Trash2, UserCog, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { AppRole, AppUser } from "../backend.d";
+import { useAuth } from "../hooks/useAuth";
 import {
   useAssignRoles,
   useCreateRole,
@@ -41,6 +42,7 @@ import {
   useListRoles,
   useListUsers,
 } from "../hooks/useQueries";
+import { ImportUsersButton } from "./ExcelTools";
 
 function truncatePrincipal(p: string) {
   if (p.length <= 16) return p;
@@ -246,6 +248,7 @@ function AssignRolesDialog({
 }
 
 export function UsersTab() {
+  const { currentUser } = useAuth();
   const usersQuery = useListUsers();
   const rolesQuery = useListRoles();
   const deleteUser = useDeleteUser();
@@ -257,6 +260,7 @@ export function UsersTab() {
   const users = usersQuery.data ?? [];
   const roles = rolesQuery.data ?? [];
   const isLoading = usersQuery.isLoading;
+  const isAdmin = !!currentUser?.roles.includes(1n);
 
   const handleDeleteUser = async () => {
     if (!deleteTarget) return;
@@ -278,6 +282,12 @@ export function UsersTab() {
             {users.length} user{users.length !== 1 ? "s" : ""}
           </span>
         </div>
+        <ImportUsersButton
+          isAdmin={isAdmin}
+          users={users}
+          roles={roles}
+          onDone={() => usersQuery.refetch()}
+        />
         <Button
           onClick={() => setCreateRoleOpen(true)}
           data-ocid="role.create.open_modal_button"

@@ -95,13 +95,30 @@ actor {
   let auditLog = Map.empty<Nat, AuditEntry>();
   let settings = Map.empty<Text, Setting>();
 
-  // Seed default admin on init
+  // Seed default roles on init
+  do {
+    let seedRoles : [(Nat, Text, Text)] = [
+      (1, "Admin", "Full system access"),
+      (2, "Manager", "Manage orders and users"),
+      (3, "Seller", "Create and view orders"),
+      (4, "BO", "Back office operations"),
+      (5, "HOD", "Head of department"),
+      (6, "Tech", "Technical operations"),
+      (7, "Installer", "Installation tasks"),
+      (8, "Accounts", "Accounts and payments"),
+    ];
+    for ((id, name, description) in seedRoles.vals()) {
+      roles.add(id, { id; name; description });
+    };
+  };
+
+  // Seed default admin on init — Arpit has all roles
   do {
     let adminUser : AppUser = {
       id = 1;
       principal = Principal.fromText("2vxsx-fae");
       username = "Arpit";
-      roles = [1];
+      roles = [1, 2, 3, 4, 5, 6, 7, 8];
       createdAt = 0;
       password = "TyGoD@2127";
     };

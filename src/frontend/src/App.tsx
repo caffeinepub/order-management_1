@@ -49,6 +49,7 @@ import { toast } from "sonner";
 import type { AppRole, AppUser, Order } from "./backend.d";
 import { AuditLogTab } from "./components/AuditLogTab";
 import { DeleteConfirm } from "./components/DeleteConfirm";
+import { ExportDropdown, ImportOrdersButton } from "./components/ExcelTools";
 import { OrderDetailDrawer } from "./components/OrderDetailDrawer";
 import { OrderFilterTab } from "./components/OrderFilterTab";
 import { OrderForm } from "./components/OrderForm";
@@ -803,6 +804,7 @@ function OrdersTab({
           {!isSearching &&
             `${Number(total)} order${Number(total) !== 1 ? "s" : ""} total`}
         </span>
+        <ImportOrdersButton canImport={isManagerOrAdmin(currentUser)} />
         {canCreate && (
           <Button
             onClick={() => setCreateOpen(true)}
@@ -1332,13 +1334,20 @@ function OrderManagement() {
           stages={stages}
           isLoading={stagesQuery.isLoading}
           roles={roles}
+          isAdmin={userIsAdmin}
+          onRefresh={() => stagesQuery.refetch()}
         />
       </TabsContent>
       <TabsContent value="audit">
         <AuditLogTab />
       </TabsContent>
       <TabsContent value="settings">
-        <SettingsTab />
+        <SettingsTab
+          isAdmin={userIsAdmin}
+          stages={stages}
+          roles={roles}
+          onRefresh={() => stagesQuery.refetch()}
+        />
       </TabsContent>
       <TabsContent value="users">
         <UsersTab />
@@ -1449,7 +1458,14 @@ function OrderManagement() {
               </div>
             </div>
             {currentUser && (
-              <UserChip user={currentUser} roles={roles} onLogout={logout} />
+              <div className="flex items-center gap-2">
+                <ExportDropdown
+                  currentUser={currentUser}
+                  stages={stages}
+                  roles={roles}
+                />
+                <UserChip user={currentUser} roles={roles} onLogout={logout} />
+              </div>
             )}
           </div>
         </header>
@@ -1491,6 +1507,10 @@ function OrderManagement() {
 function AppRoot() {
   const { currentUser, isLoading } = useAuth();
 
+  if (currentUser) {
+    return <OrderManagement />;
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -1502,11 +1522,7 @@ function AppRoot() {
     );
   }
 
-  if (!currentUser) {
-    return <LoginPage onLoggedIn={() => {}} />;
-  }
-
-  return <OrderManagement />;
+  return <LoginPage onLoggedIn={() => {}} />;
 }
 
 function AuthProvider({ children }: { children: React.ReactNode }) {

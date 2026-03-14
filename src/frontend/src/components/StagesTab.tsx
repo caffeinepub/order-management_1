@@ -36,6 +36,7 @@ import {
   useDeleteStage,
   useUpdateStage,
 } from "../hooks/useQueries";
+import { ImportStagesButton } from "./ExcelTools";
 
 interface StageFormData {
   name: string;
@@ -190,9 +191,17 @@ interface StagesTabProps {
   stages: Stage[];
   isLoading: boolean;
   roles: AppRole[];
+  isAdmin: boolean;
+  onRefresh: () => void;
 }
 
-export function StagesTab({ stages, isLoading, roles }: StagesTabProps) {
+export function StagesTab({
+  stages,
+  isLoading,
+  roles,
+  isAdmin,
+  onRefresh,
+}: StagesTabProps) {
   const [createOpen, setCreateOpen] = useState(false);
   const [editStage, setEditStage] = useState<Stage | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Stage | null>(null);
@@ -288,6 +297,11 @@ export function StagesTab({ stages, isLoading, roles }: StagesTabProps) {
             ({stages.length})
           </span>
         </div>
+        <ImportStagesButton
+          isAdmin={isAdmin}
+          roles={roles}
+          onDone={onRefresh}
+        />
         <Button
           onClick={() => setCreateOpen(true)}
           data-ocid="stages.create.open_modal_button"

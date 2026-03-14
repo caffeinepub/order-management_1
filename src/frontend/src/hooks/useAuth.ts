@@ -107,7 +107,7 @@ export function useAuthProvider(): AuthContextValue {
 
   return {
     currentUser,
-    isLoading: isLoading || isFetching,
+    isLoading: isLoading,
     login,
     register,
     logout,

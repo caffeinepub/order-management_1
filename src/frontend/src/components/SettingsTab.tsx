@@ -13,6 +13,7 @@ import { Check, Loader2, Pencil, Settings, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useGetSetting, useSetSetting } from "../hooks/useQueries";
+import { BackupRestoreSection } from "./ExcelTools";
 
 const SETTING_KEYS = [
   { key: "app_name", label: "App Name" },
@@ -127,7 +128,19 @@ function SettingRow({ settingKey, label, index }: SettingRowProps) {
   );
 }
 
-export function SettingsTab() {
+interface SettingsTabProps {
+  isAdmin: boolean;
+  stages: import("../backend.d").Stage[];
+  roles: import("../backend.d").AppRole[];
+  onRefresh: () => void;
+}
+
+export function SettingsTab({
+  isAdmin,
+  stages,
+  roles,
+  onRefresh,
+}: SettingsTabProps) {
   return (
     <>
       <div className="flex items-center gap-2 mb-4">
@@ -163,6 +176,12 @@ export function SettingsTab() {
           </TableBody>
         </Table>
       </div>
+      <BackupRestoreSection
+        isAdmin={isAdmin}
+        stages={stages}
+        roles={roles}
+        onRestoreDone={onRefresh}
+      />
     </>
   );
 }
