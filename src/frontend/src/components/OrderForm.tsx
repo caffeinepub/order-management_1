@@ -15,9 +15,51 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Order } from "../backend.d";
+
+export interface FormData {
+  orderId: string;
+  consumerNo: string;
+  contactNo: string;
+  customerName: string;
+  address: string;
+  orderDate: string;
+  expectedDelivery: string;
+  product: string;
+  quantityText: string;
+  amountText: string;
+  status: string;
+  paymentStatus: string;
+  paymentDate: string;
+  collectDate: string;
+  notes: string;
+}
+
+const STATUSES = ["Pending", "Active", "Completed", "Cancelled", "On Hold"];
+const PAYMENT_STATUSES = ["Unpaid", "Partial", "Paid"];
+
+const today = new Date().toISOString().split("T")[0];
+
+const EMPTY: FormData = {
+  orderId: "",
+  consumerNo: "",
+  contactNo: "",
+  customerName: "",
+  address: "",
+  orderDate: today,
+  expectedDelivery: "",
+  product: "",
+  quantityText: "1",
+  amountText: "",
+  status: "Pending",
+  paymentStatus: "Unpaid",
+  paymentDate: "",
+  collectDate: "",
+  notes: "",
+};
 
 interface OrderFormProps {
   open: boolean;
@@ -27,19 +69,6 @@ interface OrderFormProps {
   isPending: boolean;
 }
 
-export interface FormData {
-  consumerNo: string;
-  contactNo: string;
-  customerName: string;
-  address: string;
-  product: string;
-  amountText: string;
-  expectedPaymentDate: string;
-  status?: string;
-}
-
-const STATUSES = ["active", "pending", "completed", "cancelled", "on-hold"];
-
 export function OrderForm({
   open,
   onOpenChange,
@@ -48,46 +77,36 @@ export function OrderForm({
   isPending,
 }: OrderFormProps) {
   const isEdit = !!order;
-  const [form, setForm] = useState<FormData>({
-    consumerNo: "",
-    contactNo: "",
-    customerName: "",
-    address: "",
-    product: "",
-    amountText: "",
-    expectedPaymentDate: "",
-    status: "active",
-  });
+  const [form, setForm] = useState<FormData>(EMPTY);
 
   useEffect(() => {
     if (order) {
       setForm({
+        orderId: order.orderId,
         consumerNo: order.consumerNo,
         contactNo: order.contactNo,
         customerName: order.customerName,
         address: order.address,
+        orderDate: order.orderDate,
+        expectedDelivery: order.expectedDelivery,
         product: order.product,
-        amountText: order.amountText,
-        expectedPaymentDate: order.expectedPaymentDate,
+        quantityText: order.quantity.toString(),
+        amountText: order.amount.toString(),
         status: order.status,
+        paymentStatus: order.paymentStatus,
+        paymentDate: order.paymentDate,
+        collectDate: order.collectDate,
+        notes: order.notes,
       });
     } else {
-      setForm({
-        consumerNo: "",
-        contactNo: "",
-        customerName: "",
-        address: "",
-        product: "",
-        amountText: "",
-        expectedPaymentDate: "",
-        status: "active",
-      });
+      setForm(EMPTY);
     }
   }, [order]);
 
   const set =
-    (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement>) =>
-      setForm((prev) => ({ ...prev, [field]: e.target.value }));
+    (field: keyof FormData) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setForm((p) => ({ ...p, [field]: e.target.value }));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,152 +116,166 @@ export function OrderForm({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-lg bg-card border-border"
-        data-ocid={isEdit ? "order.edit.dialog" : "order.create.dialog"}
+        className="bg-card border-border max-w-lg max-h-[90vh] overflow-y-auto"
+        data-ocid="order.form.dialog"
       >
         <DialogHeader>
-          <DialogTitle className="font-display text-lg font-semibold text-foreground">
-            {isEdit ? `Edit Order #${order?.id}` : "New Order"}
+          <DialogTitle className="font-display text-base">
+            {isEdit ? "Edit Order" : "New Order"}
           </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-3 py-1">
           <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+                Order ID *
+              </Label>
+              <Input
+                data-ocid="order.form.orderid.input"
+                value={form.orderId}
+                onChange={set("orderId")}
+                required
+                placeholder="e.g. ORD-001"
+                className="bg-input border-border h-8 text-sm"
+              />
+            </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground uppercase tracking-wider">
                 Consumer No *
               </Label>
               <Input
-                data-ocid={
-                  isEdit
-                    ? "order.edit.consumerNo.input"
-                    : "order.create.consumerNo.input"
-                }
+                data-ocid="order.form.consumerno.input"
                 value={form.consumerNo}
                 onChange={set("consumerNo")}
                 required
-                placeholder="CNS-001"
+                placeholder="Consumer No"
                 className="bg-input border-border h-8 text-sm"
               />
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground uppercase tracking-wider">
                 Contact No *
               </Label>
               <Input
-                data-ocid={
-                  isEdit
-                    ? "order.edit.contactNo.input"
-                    : "order.create.contactNo.input"
-                }
+                data-ocid="order.form.contactno.input"
                 value={form.contactNo}
                 onChange={set("contactNo")}
                 required
-                placeholder="+1 555-0100"
+                placeholder="Contact No"
+                className="bg-input border-border h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+                Customer Name *
+              </Label>
+              <Input
+                data-ocid="order.form.customername.input"
+                value={form.customerName}
+                onChange={set("customerName")}
+                required
+                placeholder="Full name"
                 className="bg-input border-border h-8 text-sm"
               />
             </div>
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground uppercase tracking-wider">
-              Customer Name *
+              Address
             </Label>
             <Input
-              data-ocid={
-                isEdit
-                  ? "order.edit.customerName.input"
-                  : "order.create.customerName.input"
-              }
-              value={form.customerName}
-              onChange={set("customerName")}
-              required
-              placeholder="John Doe"
-              className="bg-input border-border h-8 text-sm"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wider">
-              Address *
-            </Label>
-            <Input
-              data-ocid={
-                isEdit
-                  ? "order.edit.address.input"
-                  : "order.create.address.input"
-              }
+              data-ocid="order.form.address.input"
               value={form.address}
               onChange={set("address")}
-              required
-              placeholder="123 Main St, City"
+              placeholder="Address"
               className="bg-input border-border h-8 text-sm"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground uppercase tracking-wider">
-                Product *
+                Order Date *
               </Label>
               <Input
-                data-ocid={
-                  isEdit
-                    ? "order.edit.product.input"
-                    : "order.create.product.input"
-                }
-                value={form.product}
-                onChange={set("product")}
+                type="date"
+                data-ocid="order.form.orderdate.input"
+                value={form.orderDate}
+                onChange={set("orderDate")}
                 required
-                placeholder="Product name"
                 className="bg-input border-border h-8 text-sm"
               />
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground uppercase tracking-wider">
-                Amount *
+                Expected Delivery
               </Label>
               <Input
-                data-ocid={
-                  isEdit
-                    ? "order.edit.amountText.input"
-                    : "order.create.amountText.input"
-                }
-                value={form.amountText}
-                onChange={set("amountText")}
-                required
-                placeholder="$1,200.00"
+                type="date"
+                data-ocid="order.form.expecteddelivery.input"
+                value={form.expectedDelivery}
+                onChange={set("expectedDelivery")}
                 className="bg-input border-border h-8 text-sm"
               />
             </div>
           </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+              Product *
+            </Label>
+            <Input
+              data-ocid="order.form.product.input"
+              value={form.product}
+              onChange={set("product")}
+              required
+              placeholder="Product description"
+              className="bg-input border-border h-8 text-sm"
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground uppercase tracking-wider">
-                Expected Payment Date *
+                Quantity *
               </Label>
               <Input
-                data-ocid={
-                  isEdit
-                    ? "order.edit.paymentDate.input"
-                    : "order.create.paymentDate.input"
-                }
-                value={form.expectedPaymentDate}
-                onChange={set("expectedPaymentDate")}
+                type="number"
+                min="1"
+                data-ocid="order.form.quantity.input"
+                value={form.quantityText}
+                onChange={set("quantityText")}
                 required
-                placeholder="2026-04-01"
+                placeholder="1"
                 className="bg-input border-border h-8 text-sm"
               />
             </div>
-            {isEdit && (
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+                Amount
+              </Label>
+              <Input
+                type="number"
+                step="0.01"
+                data-ocid="order.form.amount.input"
+                value={form.amountText}
+                onChange={set("amountText")}
+                placeholder="0.00"
+                className="bg-input border-border h-8 text-sm"
+              />
+            </div>
+          </div>
+          {isEdit && (
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider">
                   Status
                 </Label>
                 <Select
                   value={form.status}
-                  onValueChange={(val) =>
-                    setForm((prev) => ({ ...prev, status: val }))
-                  }
+                  onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}
                 >
                   <SelectTrigger
-                    data-ocid="order.edit.status.select"
+                    data-ocid="order.form.status.select"
                     className="bg-input border-border h-8 text-sm"
                   >
                     <SelectValue />
@@ -256,40 +289,92 @@ export function OrderForm({
                   </SelectContent>
                 </Select>
               </div>
-            )}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+                  Payment Status
+                </Label>
+                <Select
+                  value={form.paymentStatus}
+                  onValueChange={(v) =>
+                    setForm((p) => ({ ...p, paymentStatus: v }))
+                  }
+                >
+                  <SelectTrigger
+                    data-ocid="order.form.paymentstatus.select"
+                    className="bg-input border-border h-8 text-sm"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_STATUSES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          {isEdit && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+                  Payment Date
+                </Label>
+                <Input
+                  type="date"
+                  value={form.paymentDate}
+                  onChange={set("paymentDate")}
+                  className="bg-input border-border h-8 text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+                  Collect Date
+                </Label>
+                <Input
+                  type="date"
+                  value={form.collectDate}
+                  onChange={set("collectDate")}
+                  className="bg-input border-border h-8 text-sm"
+                />
+              </div>
+            </div>
+          )}
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+              Notes
+            </Label>
+            <Textarea
+              data-ocid="order.form.notes.textarea"
+              value={form.notes}
+              onChange={set("notes")}
+              placeholder="Optional notes"
+              className="bg-input border-border text-sm resize-none h-16"
+            />
           </div>
           <DialogFooter className="pt-2">
             <Button
               type="button"
               variant="ghost"
+              size="sm"
               onClick={() => onOpenChange(false)}
-              data-ocid={
-                isEdit
-                  ? "order.edit.cancel_button"
-                  : "order.create.cancel_button"
-              }
-              className="text-muted-foreground"
+              className="h-8 text-sm"
             >
               Cancel
             </Button>
             <Button
               type="submit"
+              size="sm"
               disabled={isPending}
-              data-ocid={
-                isEdit
-                  ? "order.edit.submit_button"
-                  : "order.create.submit_button"
-              }
-              className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+              data-ocid="order.form.submit_button"
+              className="h-8 text-sm bg-primary text-primary-foreground"
             >
-              {isPending ? (
-                <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
-              ) : null}
-              {isPending
-                ? "Saving..."
-                : isEdit
-                  ? "Save Changes"
-                  : "Create Order"}
+              {isPending && (
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              )}
+              {isEdit ? "Save Changes" : "Create Order"}
             </Button>
           </DialogFooter>
         </form>

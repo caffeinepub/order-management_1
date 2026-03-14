@@ -102,7 +102,7 @@ export function AuditLogTab() {
                     {entry.performedBy.toString().slice(0, 12)}…
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
-                    {entry.detail}
+                    {entry.details}
                   </TableCell>
                 </TableRow>
               ))

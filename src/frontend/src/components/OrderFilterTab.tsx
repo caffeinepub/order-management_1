@@ -143,11 +143,11 @@ export function OrderFilterTab({
                     </span>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {order.expectedPaymentDate || "—"}
+                    {order.expectedDelivery || "—"}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      {order.holdFlag && (
+                      {order.isHeld && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <PauseCircle className="w-3.5 h-3.5 text-yellow-400" />
@@ -155,7 +155,7 @@ export function OrderFilterTab({
                           <TooltipContent>On hold</TooltipContent>
                         </Tooltip>
                       )}
-                      {order.allClearFlag && (
+                      {order.isAllClear && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />

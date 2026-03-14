@@ -19,7 +19,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Layers, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Layers,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { AppRole, Stage } from "../backend.d";
@@ -31,20 +39,17 @@ import {
 
 interface StageFormData {
   name: string;
-  order: string;
-  roleIds: bigint[];
+  orderIndex: string;
+  assignedRoles: bigint[];
+  sfaEnabled: boolean;
 }
 
-const EMPTY_FORM: StageFormData = { name: "", order: "1", roleIds: [] };
-
-interface StageDialogProps {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  initial?: Stage | null;
-  roles: AppRole[];
-  onSave: (data: StageFormData) => Promise<void>;
-  isPending: boolean;
-}
+const EMPTY_FORM: StageFormData = {
+  name: "",
+  orderIndex: "1",
+  assignedRoles: [],
+  sfaEnabled: false,
+};
 
 function StageDialog({
   open,
@@ -53,30 +58,32 @@ function StageDialog({
   roles,
   onSave,
   isPending,
-}: StageDialogProps) {
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  initial?: Stage | null;
+  roles: AppRole[];
+  onSave: (data: StageFormData) => Promise<void>;
+  isPending: boolean;
+}) {
   const [form, setForm] = useState<StageFormData>(
     initial
       ? {
-          name: initial.stageName,
-          order: initial.stageOrder.toString(),
-          roleIds: [...initial.roleIds],
+          name: initial.name,
+          orderIndex: initial.orderIndex.toString(),
+          assignedRoles: [...initial.assignedRoles],
+          sfaEnabled: initial.sfaEnabled,
         }
       : EMPTY_FORM,
   );
 
-  const toggleRole = (roleId: bigint) => {
+  const toggleRole = (roleId: bigint) =>
     setForm((prev) => ({
       ...prev,
-      roleIds: prev.roleIds.includes(roleId)
-        ? prev.roleIds.filter((id) => id !== roleId)
-        : [...prev.roleIds, roleId],
+      assignedRoles: prev.assignedRoles.includes(roleId)
+        ? prev.assignedRoles.filter((id) => id !== roleId)
+        : [...prev.assignedRoles, roleId],
     }));
-  };
-
-  const handleSave = async () => {
-    if (!form.name.trim()) return;
-    await onSave(form);
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -109,9 +116,9 @@ function StageDialog({
             <Input
               type="number"
               min="1"
-              value={form.order}
+              value={form.orderIndex}
               onChange={(e) =>
-                setForm((p) => ({ ...p, order: e.target.value }))
+                setForm((p) => ({ ...p, orderIndex: e.target.value }))
               }
               className="bg-input border-border h-9 text-sm"
             />
@@ -124,22 +131,32 @@ function StageDialog({
               <div key={role.id.toString()} className="flex items-center gap-2">
                 <Checkbox
                   id={`role-${role.id}`}
-                  checked={form.roleIds.includes(role.id)}
+                  checked={form.assignedRoles.includes(role.id)}
                   onCheckedChange={() => toggleRole(role.id)}
                 />
                 <label
                   htmlFor={`role-${role.id}`}
                   className="text-sm text-foreground cursor-pointer"
                 >
-                  {role.roleName}
+                  {role.name}
                 </label>
               </div>
             ))}
-            {roles.length === 0 && (
-              <p className="text-xs text-muted-foreground">
-                No roles available.
-              </p>
-            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="sfa-enabled"
+              checked={form.sfaEnabled}
+              onCheckedChange={(v) =>
+                setForm((p) => ({ ...p, sfaEnabled: !!v }))
+              }
+            />
+            <label
+              htmlFor="sfa-enabled"
+              className="text-sm text-foreground cursor-pointer"
+            >
+              SFA Enabled
+            </label>
           </div>
         </div>
         <DialogFooter>
@@ -153,7 +170,7 @@ function StageDialog({
           </Button>
           <Button
             size="sm"
-            onClick={handleSave}
+            onClick={() => onSave(form)}
             disabled={isPending || !form.name.trim()}
             data-ocid="stages.create.submit_button"
             className="h-8 text-sm bg-primary text-primary-foreground"
@@ -184,17 +201,20 @@ export function StagesTab({ stages, isLoading, roles }: StagesTabProps) {
   const updateMutation = useUpdateStage();
   const deleteMutation = useDeleteStage();
 
+  const sorted = [...stages].sort(
+    (a, b) => Number(a.orderIndex) - Number(b.orderIndex),
+  );
+
   const getRoleNames = (roleIds: bigint[]) =>
-    roleIds.map(
-      (id) => roles.find((r) => r.id === id)?.roleName ?? `Role ${id}`,
-    );
+    roleIds.map((id) => roles.find((r) => r.id === id)?.name ?? `Role ${id}`);
 
   const handleCreate = async (data: StageFormData) => {
     try {
       await createMutation.mutateAsync({
         name: data.name.trim(),
-        order: BigInt(data.order || "1"),
-        roleIds: data.roleIds,
+        orderIndex: BigInt(data.orderIndex || "1"),
+        assignedRoles: data.assignedRoles,
+        sfaEnabled: data.sfaEnabled,
       });
       toast.success("Stage created");
       setCreateOpen(false);
@@ -209,8 +229,9 @@ export function StagesTab({ stages, isLoading, roles }: StagesTabProps) {
       await updateMutation.mutateAsync({
         id: editStage.id,
         name: data.name.trim(),
-        order: BigInt(data.order || "1"),
-        roleIds: data.roleIds,
+        orderIndex: BigInt(data.orderIndex || "1"),
+        assignedRoles: data.assignedRoles,
+        sfaEnabled: data.sfaEnabled,
       });
       toast.success("Stage updated");
       setEditStage(null);
@@ -222,16 +243,38 @@ export function StagesTab({ stages, isLoading, roles }: StagesTabProps) {
   const handleDelete = async (stage: Stage) => {
     try {
       await deleteMutation.mutateAsync(stage.id);
-      toast.success(`Stage "${stage.stageName}" deleted`);
+      toast.success(`Stage "${stage.name}" deleted`);
       setDeleteTarget(null);
     } catch {
       toast.error("Failed to delete stage");
     }
   };
 
-  const sorted = [...stages].sort(
-    (a, b) => Number(a.stageOrder) - Number(b.stageOrder),
-  );
+  const handleReorder = async (stage: Stage, direction: "up" | "down") => {
+    const idx = sorted.findIndex((s) => s.id === stage.id);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sorted.length) return;
+    const other = sorted[swapIdx];
+    try {
+      await updateMutation.mutateAsync({
+        id: stage.id,
+        name: stage.name,
+        orderIndex: other.orderIndex,
+        assignedRoles: stage.assignedRoles,
+        sfaEnabled: stage.sfaEnabled,
+      });
+      await updateMutation.mutateAsync({
+        id: other.id,
+        name: other.name,
+        orderIndex: stage.orderIndex,
+        assignedRoles: other.assignedRoles,
+        sfaEnabled: other.sfaEnabled,
+      });
+      toast.success("Stage reordered");
+    } catch {
+      toast.error("Failed to reorder stage");
+    }
+  };
 
   return (
     <>
@@ -268,7 +311,7 @@ export function StagesTab({ stages, isLoading, roles }: StagesTabProps) {
               <TableHead className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
                 Roles
               </TableHead>
-              <TableHead className="w-20" />
+              <TableHead className="w-36" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -302,14 +345,14 @@ export function StagesTab({ stages, isLoading, roles }: StagesTabProps) {
                   data-ocid={`stages.row.item.${idx + 1}`}
                 >
                   <TableCell className="font-mono text-xs text-muted-foreground">
-                    {stage.stageOrder.toString()}
+                    {stage.orderIndex.toString()}
                   </TableCell>
                   <TableCell className="text-sm font-medium text-foreground">
-                    {stage.stageName}
+                    {stage.name}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                      {getRoleNames(stage.roleIds).map((name) => (
+                      {getRoleNames(stage.assignedRoles).map((name) => (
                         <Badge
                           key={name}
                           variant="secondary"
@@ -318,7 +361,7 @@ export function StagesTab({ stages, isLoading, roles }: StagesTabProps) {
                           {name}
                         </Badge>
                       ))}
-                      {stage.roleIds.length === 0 && (
+                      {stage.assignedRoles.length === 0 && (
                         <span className="text-xs text-muted-foreground">
                           No roles
                         </span>
@@ -327,6 +370,28 @@ export function StagesTab({ stages, isLoading, roles }: StagesTabProps) {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1 justify-end">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleReorder(stage, "up")}
+                        disabled={idx === 0 || updateMutation.isPending}
+                        className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                        data-ocid={`stages.up_button.${idx + 1}`}
+                      >
+                        <ArrowUp className="w-3 h-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleReorder(stage, "down")}
+                        disabled={
+                          idx === sorted.length - 1 || updateMutation.isPending
+                        }
+                        className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                        data-ocid={`stages.down_button.${idx + 1}`}
+                      >
+                        <ArrowDown className="w-3 h-3" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -352,7 +417,6 @@ export function StagesTab({ stages, isLoading, roles }: StagesTabProps) {
         </Table>
       </div>
 
-      {/* Create Dialog */}
       <StageDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
@@ -360,8 +424,6 @@ export function StagesTab({ stages, isLoading, roles }: StagesTabProps) {
         onSave={handleCreate}
         isPending={createMutation.isPending}
       />
-
-      {/* Edit Dialog */}
       <StageDialog
         open={!!editStage}
         onOpenChange={(v) => !v && setEditStage(null)}
@@ -371,7 +433,6 @@ export function StagesTab({ stages, isLoading, roles }: StagesTabProps) {
         isPending={updateMutation.isPending}
       />
 
-      {/* Delete Confirm */}
       <Dialog
         open={!!deleteTarget}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
@@ -383,8 +444,7 @@ export function StagesTab({ stages, isLoading, roles }: StagesTabProps) {
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Delete &ldquo;{deleteTarget?.stageName}&rdquo;? This action cannot
-            be undone.
+            Delete &ldquo;{deleteTarget?.name}&rdquo;? This cannot be undone.
           </p>
           <DialogFooter>
             <Button

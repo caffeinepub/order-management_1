@@ -44,23 +44,19 @@ import {
 
 function truncatePrincipal(p: string) {
   if (p.length <= 16) return p;
-  return `${p.slice(0, 8)}…${p.slice(-6)}`;
+  return `${p.slice(0, 8)}\u2026${p.slice(-6)}`;
 }
 
 function getRoleNames(roleIds: bigint[], roles: AppRole[]): string[] {
   return roleIds
-    .map((rid) => roles.find((r) => r.id === rid)?.roleName ?? `Role ${rid}`)
+    .map((rid) => roles.find((r) => r.id === rid)?.name ?? `Role ${rid}`)
     .filter(Boolean) as string[];
 }
 
-// ─── Create Role Dialog ────────────────────────────────────────────────────
 function CreateRoleDialog({
   open,
   onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-}) {
+}: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const createRole = useCreateRole();
@@ -111,7 +107,7 @@ function CreateRoleDialog({
               data-ocid="role.create.textarea"
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
-              placeholder="Short description of this role"
+              placeholder="Short description"
               className="bg-input border-border text-sm resize-none"
               rows={2}
             />
@@ -132,9 +128,9 @@ function CreateRoleDialog({
               data-ocid="role.create.submit_button"
               className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
             >
-              {createRole.isPending ? (
+              {createRole.isPending && (
                 <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
-              ) : null}
+              )}
               {createRole.isPending ? "Creating..." : "Create Role"}
             </Button>
           </DialogFooter>
@@ -144,7 +140,6 @@ function CreateRoleDialog({
   );
 }
 
-// ─── Assign Roles Dialog ───────────────────────────────────────────────────
 function AssignRolesDialog({
   user,
   roles,
@@ -160,20 +155,17 @@ function AssignRolesDialog({
   const assignRoles = useAssignRoles();
 
   const handleOpen = (v: boolean) => {
-    if (v && user) {
-      setSelected(new Set(user.roleIds));
-    }
+    if (v && user) setSelected(new Set(user.roles));
     onOpenChange(v);
   };
 
-  const toggle = (id: bigint) => {
+  const toggle = (id: bigint) =>
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  };
 
   const handleSave = async () => {
     if (!user) return;
@@ -215,11 +207,11 @@ function AssignRolesDialog({
                 className="cursor-pointer space-y-0.5"
               >
                 <p className="text-sm font-medium text-foreground">
-                  {role.roleName}
+                  {role.name}
                 </p>
-                {role.roleDescription && (
+                {role.description && (
                   <p className="text-xs text-muted-foreground">
-                    {role.roleDescription}
+                    {role.description}
                   </p>
                 )}
               </label>
@@ -242,9 +234,9 @@ function AssignRolesDialog({
             data-ocid="user.assign_roles.save_button"
             className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
           >
-            {assignRoles.isPending ? (
+            {assignRoles.isPending && (
               <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
-            ) : null}
+            )}
             {assignRoles.isPending ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
@@ -253,7 +245,6 @@ function AssignRolesDialog({
   );
 }
 
-// ─── Main UsersTab ─────────────────────────────────────────────────────────
 export function UsersTab() {
   const usersQuery = useListUsers();
   const rolesQuery = useListRoles();
@@ -280,7 +271,6 @@ export function UsersTab() {
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4 text-muted-foreground" />
@@ -296,12 +286,10 @@ export function UsersTab() {
           className="h-8 gap-1.5 text-sm border-border"
         >
           <Shield className="w-3.5 h-3.5" />
-          <Plus className="w-3 h-3" />
-          New Role
+          <Plus className="w-3 h-3" /> New Role
         </Button>
       </div>
 
-      {/* Users Table */}
       <div className="border border-border rounded-sm overflow-hidden">
         <Table data-ocid="user.table">
           <TableHeader>
@@ -361,11 +349,11 @@ export function UsersTab() {
                     {user.username}
                   </TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">
-                    {truncatePrincipal(user.userPrincipal.toString())}
+                    {truncatePrincipal(user.principal.toString())}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                      {getRoleNames(user.roleIds, roles).map((name) => (
+                      {getRoleNames(user.roles, roles).map((name) => (
                         <Badge
                           key={name}
                           variant="secondary"
@@ -374,7 +362,7 @@ export function UsersTab() {
                           {name}
                         </Badge>
                       ))}
-                      {user.roleIds.length === 0 && (
+                      {user.roles.length === 0 && (
                         <span className="text-xs text-muted-foreground italic">
                           No roles
                         </span>
@@ -412,7 +400,6 @@ export function UsersTab() {
         </Table>
       </div>
 
-      {/* Roles Reference */}
       {roles.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
@@ -426,11 +413,11 @@ export function UsersTab() {
               >
                 <Shield className="w-3 h-3 text-primary" />
                 <span className="text-xs font-medium text-foreground">
-                  {role.roleName}
+                  {role.name}
                 </span>
-                {role.roleDescription && (
+                {role.description && (
                   <span className="text-xs text-muted-foreground">
-                    — {role.roleDescription}
+                    — {role.description}
                   </span>
                 )}
               </div>
@@ -439,7 +426,6 @@ export function UsersTab() {
         </div>
       )}
 
-      {/* Dialogs */}
       <CreateRoleDialog
         open={createRoleOpen}
         onOpenChange={setCreateRoleOpen}
@@ -480,9 +466,9 @@ export function UsersTab() {
               data-ocid="user.delete.confirm_button"
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteUser.isPending ? (
+              {deleteUser.isPending && (
                 <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
-              ) : null}
+              )}
               {deleteUser.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -27,6 +27,8 @@ import {
   Eye,
   Layers,
   Loader2,
+  Lock,
+  LogOut,
   PackageSearch,
   PauseCircle,
   Pencil,
@@ -36,11 +38,12 @@ import {
   Settings,
   Shield,
   Trash2,
-  UserCheck,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import type React from "react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import type { AppRole, AppUser, Order } from "./backend.d";
@@ -53,10 +56,10 @@ import type { FormData } from "./components/OrderForm";
 import { SettingsTab } from "./components/SettingsTab";
 import { StagesTab } from "./components/StagesTab";
 import { UsersTab } from "./components/UsersTab";
+import { AuthContext, useAuth, useAuthProvider } from "./hooks/useAuth";
 import {
   useCreateOrder,
   useDeleteOrder,
-  useGetCurrentUser,
   useListAllClear,
   useListCollectToday,
   useListExpectedPayment,
@@ -67,7 +70,6 @@ import {
   useListStages,
   useMarkAllClear,
   useMarkHold,
-  useRegisterSelf,
   useSearchOrders,
   useSetAllClearFlag,
   useSetHoldFlag,
@@ -101,106 +103,480 @@ function getStatusClass(status: string): string {
 }
 
 function isAdmin(user: AppUser | null | undefined): boolean {
-  return !!user?.roleIds.includes(1n);
+  return !!user?.roles.includes(1n);
 }
 
 function isManagerOrAdmin(user: AppUser | null | undefined): boolean {
-  return !!user?.roleIds.some((id) => id === 1n || id === 2n);
+  return !!user?.roles.some((id) => id === 1n || id === 2n);
 }
 
 function getRoleNames(roleIds: bigint[], roles: AppRole[]): string[] {
   return roleIds.map(
-    (rid) => roles.find((r) => r.id === rid)?.roleName ?? `Role ${rid}`,
+    (rid) => roles.find((r) => r.id === rid)?.name ?? `Role ${rid}`,
   );
 }
 
-// ─── Registration Gate ─────────────────────────────────────────────────────
-function RegistrationGate({ onRegistered }: { onRegistered: () => void }) {
+// ─── Login Page ────────────────────────────────────────────────────────────
+function LoginPage({
+  onLoggedIn,
+}: {
+  onLoggedIn: () => void;
+}) {
+  const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
-  const registerMutation = useRegisterSelf();
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const { login, register, isLoading } = useAuth();
 
-  const handleRegister = async (e: React.FormEvent) => {
+  // Also show public search
+  const [publicSearch, setPublicSearch] = useState("");
+  const [publicSearchInput, setPublicSearchInput] = useState("");
+  const [publicDetailOrder, setPublicDetailOrder] = useState<Order | null>(
+    null,
+  );
+  const searchQuery = useSearchOrders(publicSearch);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) return;
-    try {
-      const result = await registerMutation.mutateAsync(username.trim());
-      if (result === "ok" || result === "already_registered") {
-        toast.success("Welcome! You are now registered.");
-        onRegistered();
-      } else {
-        toast.error("Registration failed. Please try again.");
+    setError("");
+    if (mode === "register") {
+      if (password !== confirmPassword) {
+        setError("Passwords do not match");
+        return;
       }
-    } catch {
-      toast.error("Registration failed. Please try again.");
+      if (password.length < 4) {
+        setError("Password must be at least 4 characters");
+        return;
+      }
+    }
+    try {
+      if (mode === "login") {
+        await login(username.trim(), password);
+        toast.success("Welcome back!");
+      } else {
+        await register(username.trim(), password);
+        toast.success("Account created! Welcome.");
+      }
+      onLoggedIn();
+    } catch (err: any) {
+      setError(err?.message ?? "Something went wrong. Please try again.");
     }
   };
 
+  const handlePublicSearch = () => {
+    setPublicSearch(publicSearchInput.trim());
+  };
+
+  const isSearching = publicSearch.length > 0;
+  const searchResults = searchQuery.data ?? [];
+
   return (
-    <div
-      className="min-h-screen bg-background flex items-center justify-center px-4"
-      data-ocid="register.page"
-    >
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-        className="w-full max-w-sm"
-      >
-        <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-sm bg-primary flex items-center justify-center mx-auto mb-4">
-            <UserCheck className="w-6 h-6 text-primary-foreground" />
-          </div>
-          <h1 className="font-display text-2xl font-bold text-foreground tracking-tight">
-            Order Management
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Create your account to get started
-          </p>
-        </div>
-        <form
-          onSubmit={handleRegister}
-          className="space-y-4 bg-card border border-border rounded-sm p-6"
-        >
-          <div className="space-y-1.5">
-            <label
-              htmlFor="reg-username"
-              className="text-xs text-muted-foreground uppercase tracking-wider font-semibold"
-            >
-              Username *
-            </label>
-            <Input
-              id="reg-username"
-              data-ocid="register.input"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              placeholder="Enter your username"
-              className="bg-input border-border h-9 text-sm"
-              autoFocus
-            />
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Header */}
+      <header className="border-b border-border bg-card">
+        <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-sm bg-primary flex items-center justify-center">
+              <ClipboardList className="w-4 h-4 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="font-display text-xl font-bold text-foreground tracking-tight">
+                Order Management
+              </h1>
+              <p className="text-xs text-muted-foreground">
+                Track and manage all orders
+              </p>
+            </div>
           </div>
           <Button
-            type="submit"
-            disabled={registerMutation.isPending || !username.trim()}
-            data-ocid="register.submit_button"
-            className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold h-9"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 h-8 text-sm"
+            data-ocid="login.open_modal_button"
+            onClick={() =>
+              document
+                .getElementById("staff-login-section")
+                ?.scrollIntoView({ behavior: "smooth" })
+            }
           >
-            {registerMutation.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : null}
-            {registerMutation.isPending ? "Registering..." : "Register"}
+            <Lock className="w-3.5 h-3.5" />
+            Staff Login
           </Button>
-        </form>
-      </motion.div>
+        </div>
+      </header>
+
+      <main className="flex-1 max-w-screen-xl mx-auto w-full px-6 py-8">
+        <div className="grid lg:grid-cols-5 gap-8">
+          {/* Public Order Search (left, wider) */}
+          <div className="lg:col-span-3 space-y-6">
+            <div>
+              <h2 className="font-display text-2xl font-bold text-foreground mb-1">
+                Track Your Order
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Search by Order ID, Consumer No, or Contact No — no login
+                required.
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  data-ocid="public.search_input"
+                  value={publicSearchInput}
+                  onChange={(e) => setPublicSearchInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handlePublicSearch()}
+                  placeholder="Order ID, Consumer No, or Contact No..."
+                  className="pl-10 bg-input border-border"
+                />
+              </div>
+              <Button
+                onClick={handlePublicSearch}
+                data-ocid="public.search.button"
+                className="bg-primary text-primary-foreground"
+              >
+                Search
+              </Button>
+              {isSearching && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setPublicSearch("");
+                    setPublicSearchInput("");
+                  }}
+                  data-ocid="public.search.cancel_button"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+
+            {/* Search Results */}
+            {isSearching && (
+              <div className="space-y-3">
+                {searchQuery.isLoading ? (
+                  <div
+                    data-ocid="public.search.loading_state"
+                    className="space-y-2"
+                  >
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-16 w-full rounded-sm" />
+                    ))}
+                  </div>
+                ) : searchResults.length === 0 ? (
+                  <div
+                    data-ocid="public.search.empty_state"
+                    className="text-center py-12 text-muted-foreground"
+                  >
+                    <PackageSearch className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">
+                      No orders found for &ldquo;{publicSearch}&rdquo;
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      {searchResults.length} result
+                      {searchResults.length !== 1 ? "s" : ""} found
+                    </p>
+                    <div className="border border-border rounded-sm overflow-hidden">
+                      <Table data-ocid="public.search.table">
+                        <TableHeader>
+                          <TableRow className="bg-muted/30 hover:bg-muted/30 border-border">
+                            <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                              Order ID
+                            </TableHead>
+                            <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                              Consumer No
+                            </TableHead>
+                            <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                              Customer
+                            </TableHead>
+                            <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                              Status
+                            </TableHead>
+                            <TableHead className="w-10" />
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {searchResults.map((order, idx) => (
+                            <TableRow
+                              key={order.id.toString()}
+                              data-ocid={`public.search.item.${idx + 1}`}
+                              className="border-border hover:bg-muted/20 cursor-pointer"
+                              onClick={() => setPublicDetailOrder(order)}
+                            >
+                              <TableCell className="text-sm font-mono">
+                                {order.orderId}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {order.consumerNo}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {order.customerName}
+                              </TableCell>
+                              <TableCell>
+                                <span
+                                  className={`text-xs px-2 py-0.5 rounded-sm border font-medium ${getStatusClass(order.status)}`}
+                                >
+                                  {order.status}
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0"
+                                  data-ocid={`public.search.view.button.${idx + 1}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPublicDetailOrder(order);
+                                  }}
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {!isSearching && (
+              <div className="grid grid-cols-3 gap-4 mt-4">
+                {["Order ID", "Consumer No", "Contact No"].map((label) => (
+                  <div
+                    key={label}
+                    className="bg-card border border-border rounded-sm p-4 text-center"
+                  >
+                    <Search className="w-5 h-5 text-primary mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground">Search by</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Staff Login (right) */}
+          <div id="staff-login-section" className="lg:col-span-2">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+              className="bg-card border border-border rounded-sm p-6 space-y-5"
+              data-ocid="login.panel"
+            >
+              <div className="text-center">
+                <div className="w-10 h-10 rounded-sm bg-primary flex items-center justify-center mx-auto mb-3">
+                  {mode === "login" ? (
+                    <Lock className="w-5 h-5 text-primary-foreground" />
+                  ) : (
+                    <UserPlus className="w-5 h-5 text-primary-foreground" />
+                  )}
+                </div>
+                <h2 className="font-display text-xl font-bold text-foreground">
+                  {mode === "login" ? "Staff Login" : "Create Account"}
+                </h2>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {mode === "login"
+                    ? "Sign in to access the full dashboard"
+                    : "Register for staff access"}
+                </p>
+              </div>
+
+              <form
+                onSubmit={handleSubmit}
+                className="space-y-4"
+                data-ocid="login.dialog"
+              >
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="auth-username"
+                    className="text-xs text-muted-foreground uppercase tracking-wider font-semibold"
+                  >
+                    Username
+                  </label>
+                  <Input
+                    id="auth-username"
+                    data-ocid="login.input"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      setError("");
+                    }}
+                    required
+                    placeholder="Enter username"
+                    className="bg-input border-border h-9 text-sm"
+                    autoComplete="username"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="auth-password"
+                    className="text-xs text-muted-foreground uppercase tracking-wider font-semibold"
+                  >
+                    Password
+                  </label>
+                  <Input
+                    id="auth-password"
+                    data-ocid="login.input"
+                    type="password"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError("");
+                    }}
+                    required
+                    placeholder="Enter password"
+                    className="bg-input border-border h-9 text-sm"
+                    autoComplete={
+                      mode === "login" ? "current-password" : "new-password"
+                    }
+                  />
+                </div>
+
+                {mode === "register" && (
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="auth-confirm"
+                      className="text-xs text-muted-foreground uppercase tracking-wider font-semibold"
+                    >
+                      Confirm Password
+                    </label>
+                    <Input
+                      id="auth-confirm"
+                      data-ocid="register.input"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => {
+                        setConfirmPassword(e.target.value);
+                        setError("");
+                      }}
+                      required
+                      placeholder="Confirm password"
+                      className="bg-input border-border h-9 text-sm"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                )}
+
+                {error && (
+                  <p
+                    data-ocid="login.error_state"
+                    className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-sm px-3 py-2"
+                  >
+                    {error}
+                  </p>
+                )}
+
+                <Button
+                  type="submit"
+                  disabled={isLoading || !username.trim() || !password}
+                  data-ocid="login.submit_button"
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold h-9"
+                >
+                  {isLoading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : null}
+                  {isLoading
+                    ? mode === "login"
+                      ? "Signing in..."
+                      : "Creating account..."
+                    : mode === "login"
+                      ? "Sign In"
+                      : "Create Account"}
+                </Button>
+              </form>
+
+              <div className="text-center pt-1 border-t border-border">
+                {mode === "login" ? (
+                  <p className="text-xs text-muted-foreground">
+                    No account?{" "}
+                    <button
+                      type="button"
+                      data-ocid="login.register.link"
+                      onClick={() => {
+                        setMode("register");
+                        setError("");
+                      }}
+                      className="text-primary hover:underline font-medium"
+                    >
+                      Register here
+                    </button>
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Already have an account?{" "}
+                    <button
+                      type="button"
+                      data-ocid="register.login.link"
+                      onClick={() => {
+                        setMode("login");
+                        setError("");
+                      }}
+                      className="text-primary hover:underline font-medium"
+                    >
+                      Sign in
+                    </button>
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </main>
+
+      <footer className="border-t border-border py-4">
+        <p className="text-center text-xs text-muted-foreground">
+          &copy; {new Date().getFullYear()}. Built with love using{" "}
+          <a
+            href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
+            caffeine.ai
+          </a>
+        </p>
+      </footer>
+
+      {/* Public order detail drawer */}
+      <OrderDetailDrawer
+        order={publicDetailOrder}
+        onClose={() => setPublicDetailOrder(null)}
+        currentUser={null}
+        roles={[]}
+        stages={[]}
+      />
     </div>
   );
 }
 
 // ─── User Chip ─────────────────────────────────────────────────────────────
-function UserChip({ user, roles }: { user: AppUser; roles: AppRole[] }) {
-  const roleNames = getRoleNames(user.roleIds, roles);
+function UserChip({
+  user,
+  roles,
+  onLogout,
+}: {
+  user: AppUser;
+  roles: AppRole[];
+  onLogout: () => void;
+}) {
+  const roleNames = getRoleNames(user.roles, roles);
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3">
       <div className="flex flex-col items-end">
         <span className="text-xs font-semibold text-foreground">
           {user.username}
@@ -226,6 +602,20 @@ function UserChip({ user, roles }: { user: AppUser; roles: AppRole[] }) {
           {user.username.charAt(0).toUpperCase()}
         </span>
       </div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+            data-ocid="app.logout.button"
+            onClick={onLogout}
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Sign out</TooltipContent>
+      </Tooltip>
     </div>
   );
 }
@@ -281,7 +671,18 @@ function OrdersTab({
 
   const handleCreate = async (data: FormData) => {
     try {
-      const id = await createMutation.mutateAsync(data);
+      const id = await createMutation.mutateAsync({
+        orderId: data.orderId,
+        consumerNo: data.consumerNo,
+        contactNo: data.contactNo,
+        customerName: data.customerName,
+        address: data.address,
+        orderDate: data.orderDate,
+        expectedDelivery: data.expectedDelivery,
+        product: data.product,
+        quantity: BigInt(data.quantityText || "1"),
+        amount: Number.parseFloat(data.amountText || "0"),
+      });
       toast.success(`Order #${id} created successfully`);
       setCreateOpen(false);
     } catch {
@@ -294,8 +695,21 @@ function OrdersTab({
     try {
       await updateMutation.mutateAsync({
         id: editOrder.id,
-        ...data,
-        status: data.status ?? editOrder.status,
+        orderId: data.orderId,
+        consumerNo: data.consumerNo,
+        contactNo: data.contactNo,
+        customerName: data.customerName,
+        address: data.address,
+        orderDate: data.orderDate,
+        expectedDelivery: data.expectedDelivery,
+        product: data.product,
+        quantity: BigInt(data.quantityText || "1"),
+        amount: Number.parseFloat(data.amountText || "0"),
+        status: data.status || editOrder.status,
+        paymentStatus: data.paymentStatus || editOrder.paymentStatus,
+        paymentDate: data.paymentDate || editOrder.paymentDate,
+        collectDate: data.collectDate || editOrder.collectDate,
+        notes: data.notes || editOrder.notes,
       });
       toast.success(`Order #${editOrder.id} updated`);
       setEditOrder(null);
@@ -320,7 +734,7 @@ function OrdersTab({
     try {
       await setHoldFlagMutation.mutateAsync({
         id: order.id,
-        value: !order.holdFlag,
+        value: !order.isHeld,
       });
       toast.success("Hold flag updated");
     } catch {
@@ -335,7 +749,7 @@ function OrdersTab({
     try {
       await setAllClearFlagMutation.mutateAsync({
         id: order.id,
-        value: !order.allClearFlag,
+        value: !order.isAllClear,
       });
       toast.success("All-clear flag updated");
     } catch {
@@ -435,275 +849,250 @@ function OrdersTab({
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              SKELETON_ROWS.map((rowKey, i) => (
-                <TableRow key={rowKey} className="border-border">
-                  {SKELETON_COLS.map((colKey, j) => (
-                    <TableCell key={colKey}>
-                      <Skeleton
-                        className="h-4 w-full bg-muted/40"
-                        data-ocid={
-                          i === 0 && j === 0 ? "order.loading_state" : undefined
-                        }
-                      />
+              SKELETON_ROWS.map((key) => (
+                <TableRow key={key} className="border-border">
+                  {SKELETON_COLS.map((k) => (
+                    <TableCell key={k}>
+                      <Skeleton className="h-4 w-full rounded-sm" />
                     </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : orders.length === 0 ? (
-              <TableRow className="border-border">
+              <TableRow>
                 <TableCell
                   colSpan={9}
-                  className="py-16 text-center"
+                  className="text-center py-12 text-muted-foreground"
                   data-ocid="order.empty_state"
                 >
-                  <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                    <PackageSearch className="w-10 h-10 opacity-30" />
-                    <p className="text-sm font-medium">
-                      {isSearching
-                        ? `No orders match "${search}"`
-                        : "No orders yet"}
-                    </p>
-                    {!isSearching && canCreate && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setCreateOpen(true)}
-                        className="text-primary hover:text-primary"
-                      >
-                        Create your first order
-                      </Button>
-                    )}
-                  </div>
+                  <PackageSearch className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">
+                    {isSearching
+                      ? `No orders found for "${search}"`
+                      : "No orders yet. Create your first order."}
+                  </p>
                 </TableCell>
               </TableRow>
             ) : (
-              <AnimatePresence>
-                {orders.map((order, idx) => (
-                  <motion.tr
-                    key={order.id.toString()}
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ delay: idx * 0.03, duration: 0.15 }}
-                    className="order-row border-border border-b last:border-0 hover:bg-muted/20 transition-colors"
-                    data-ocid={`order.row.item.${idx + 1}`}
-                  >
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {order.id.toString()}
-                    </TableCell>
-                    <TableCell className="text-sm font-medium text-foreground">
-                      {order.consumerNo}
-                    </TableCell>
-                    <TableCell className="text-sm text-foreground">
-                      {order.customerName}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {order.contactNo}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground max-w-[120px] truncate">
-                      {order.product}
-                    </TableCell>
-                    <TableCell className="text-sm text-right font-mono text-foreground">
-                      {order.amountText}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium border ${getStatusClass(order.status)}`}
-                        >
-                          {order.status}
-                        </span>
-                        {order.holdFlag && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="inline-flex items-center">
-                                <PauseCircle className="w-3.5 h-3.5 text-yellow-400" />
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>On hold</TooltipContent>
-                          </Tooltip>
-                        )}
-                        {order.allClearFlag && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="inline-flex items-center">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>All clear</TooltipContent>
-                          </Tooltip>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {order.expectedPaymentDate}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1 justify-end">
-                        {canEdit && (
-                          <>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleToggleHold(order)}
-                                  disabled={holdPending === order.id}
-                                  data-ocid={`order.hold_toggle.${idx + 1}`}
-                                  className={`h-6 w-6 transition-colors ${
-                                    order.holdFlag
-                                      ? "text-yellow-400 hover:text-yellow-300"
-                                      : "text-muted-foreground hover:text-yellow-400"
-                                  }`}
-                                >
-                                  {holdPending === order.id ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                  ) : (
-                                    <PauseCircle className="w-3 h-3" />
-                                  )}
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {order.holdFlag
-                                  ? "Remove hold"
-                                  : "Mark as held"}
-                              </TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleToggleAllClear(order)}
-                                  disabled={allClearPending === order.id}
-                                  data-ocid={`order.allclear_toggle.${idx + 1}`}
-                                  className={`h-6 w-6 transition-colors ${
-                                    order.allClearFlag
-                                      ? "text-green-400 hover:text-green-300"
-                                      : "text-muted-foreground hover:text-green-400"
-                                  }`}
-                                >
-                                  {allClearPending === order.id ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                  ) : (
-                                    <CheckCircle2 className="w-3 h-3" />
-                                  )}
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {order.allClearFlag
-                                  ? "Remove all-clear"
-                                  : "Mark all clear"}
-                              </TooltipContent>
-                            </Tooltip>
-                          </>
-                        )}
-                        {canEdit && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setEditOrder(order)}
-                                data-ocid={`order.edit_button.${idx + 1}`}
-                                className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Edit order</TooltipContent>
-                          </Tooltip>
-                        )}
-                        {canDelete && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setDeleteTarget(order)}
-                                data-ocid={`order.delete_button.${idx + 1}`}
-                                className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Delete order</TooltipContent>
-                          </Tooltip>
-                        )}
+              orders.map((order, idx) => (
+                <TableRow
+                  key={order.id.toString()}
+                  data-ocid={`order.item.${idx + 1}`}
+                  className="border-border hover:bg-muted/20"
+                >
+                  <TableCell className="text-xs font-mono text-muted-foreground">
+                    {order.id.toString()}
+                  </TableCell>
+                  <TableCell className="text-sm">{order.consumerNo}</TableCell>
+                  <TableCell className="text-sm font-medium">
+                    {order.customerName}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {order.contactNo}
+                  </TableCell>
+                  <TableCell className="text-sm">{order.product}</TableCell>
+                  <TableCell className="text-sm text-right font-mono">
+                    {order.amount.toLocaleString()}
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-sm border font-medium ${getStatusClass(order.status)}`}
+                    >
+                      {order.status}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {order.paymentDate || "—"}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1 justify-end">
+                      {order.isHeld && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-yellow-400">
+                              <PauseCircle className="w-3.5 h-3.5" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>On Hold</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {order.isAllClear && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-green-400">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>All Clear</TooltipContent>
+                        </Tooltip>
+                      )}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            data-ocid={`order.view.button.${idx + 1}`}
+                            onClick={() => onViewDetail(order)}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>View Details</TooltipContent>
+                      </Tooltip>
+                      {canEdit && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               variant="ghost"
-                              size="icon"
-                              onClick={() => onViewDetail(order)}
-                              data-ocid={`order.detail.open_modal_button.${idx + 1}`}
-                              className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              data-ocid={`order.edit_button.${idx + 1}`}
+                              onClick={() => setEditOrder(order)}
                             >
-                              <Eye className="w-3 h-3" />
+                              <Pencil className="w-3.5 h-3.5" />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>View details</TooltipContent>
+                          <TooltipContent>Edit</TooltipContent>
                         </Tooltip>
-                      </div>
-                    </TableCell>
-                  </motion.tr>
-                ))}
-              </AnimatePresence>
+                      )}
+                      {canEdit && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className={`h-7 w-7 p-0 ${
+                                order.isHeld
+                                  ? "text-yellow-400"
+                                  : "text-muted-foreground"
+                              }`}
+                              data-ocid={`order.hold.toggle.${idx + 1}`}
+                              onClick={() => handleToggleHold(order)}
+                              disabled={holdPending === order.id}
+                            >
+                              {holdPending === order.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <PauseCircle className="w-3.5 h-3.5" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {order.isHeld ? "Remove Hold" : "Put on Hold"}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      {isAdmin(currentUser) && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className={`h-7 w-7 p-0 ${
+                                order.isAllClear
+                                  ? "text-green-400"
+                                  : "text-muted-foreground"
+                              }`}
+                              data-ocid={`order.allclear.toggle.${idx + 1}`}
+                              onClick={() => handleToggleAllClear(order)}
+                              disabled={allClearPending === order.id}
+                            >
+                              {allClearPending === order.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {order.isAllClear
+                              ? "Remove All-Clear"
+                              : "Mark All-Clear"}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      {canDelete && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-destructive/70 hover:text-destructive"
+                              data-ocid={`order.delete_button.${idx + 1}`}
+                              onClick={() => setDeleteTarget(order)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Delete</TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
             )}
           </TableBody>
         </Table>
       </div>
 
       {/* Pagination */}
-      {!isSearching && Number(total) > PAGE_SIZE && (
+      {!isSearching && (
         <div className="flex items-center justify-between mt-4">
           <span className="text-xs text-muted-foreground">
             Page {page} of {totalPages}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
+              className="h-7 text-sm"
               data-ocid="order.pagination_prev"
-              className="h-7 border-border text-sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
             >
               <ChevronLeft className="w-3.5 h-3.5" />
-              Prev
             </Button>
             <Button
               variant="outline"
               size="sm"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
+              className="h-7 text-sm"
               data-ocid="order.pagination_next"
-              className="h-7 border-border text-sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
             >
-              Next
               <ChevronRight className="w-3.5 h-3.5" />
             </Button>
           </div>
         </div>
       )}
 
-      {/* Modals */}
+      {/* Create Dialog */}
       <OrderForm
         open={createOpen}
         onOpenChange={setCreateOpen}
         onSubmit={handleCreate}
         isPending={createMutation.isPending}
       />
+
+      {/* Edit Dialog */}
       <OrderForm
         open={!!editOrder}
-        onOpenChange={(o) => !o && setEditOrder(null)}
+        onOpenChange={(o) => {
+          if (!o) setEditOrder(null);
+        }}
         order={editOrder}
         onSubmit={handleUpdate}
         isPending={updateMutation.isPending}
       />
+
+      {/* Delete Confirm */}
       <DeleteConfirm
         open={!!deleteTarget}
-        onOpenChange={(o) => !o && setDeleteTarget(null)}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null);
+        }}
         orderId={deleteTarget?.id ?? null}
         onConfirm={handleDelete}
         isPending={deleteMutation.isPending}
@@ -721,17 +1110,17 @@ function PaymentTab({
   onViewDetail: (order: Order) => void;
 }) {
   const today = new Date().toISOString().split("T")[0];
-  const expectedQuery = useListExpectedPayment();
   const collectTodayQuery = useListCollectToday(today);
+  const expectedQuery = useListExpectedPayment();
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-          Collect Today
+        <h3 className="text-sm font-semibold text-foreground mb-3">
+          Collect Today ({today})
         </h3>
         <OrderFilterTab
-          title="Collect Today"
+          title=""
           orders={collectTodayQuery.data ?? []}
           isLoading={collectTodayQuery.isLoading}
           currentUser={currentUser}
@@ -739,11 +1128,11 @@ function PaymentTab({
         />
       </div>
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+        <h3 className="text-sm font-semibold text-foreground mb-3">
           All Expected Payments
         </h3>
         <OrderFilterTab
-          title="Expected Payment"
+          title=""
           orders={expectedQuery.data ?? []}
           isLoading={expectedQuery.isLoading}
           currentUser={currentUser}
@@ -754,9 +1143,9 @@ function PaymentTab({
   );
 }
 
-// ─── Main App ──────────────────────────────────────────────────────────────
+// ─── Order Management (main authenticated view) ────────────────────────────
 function OrderManagement() {
-  const currentUserQuery = useGetCurrentUser();
+  const { currentUser, logout } = useAuth();
   const rolesQuery = useListRoles();
   const stagesQuery = useListStages();
   const heldQuery = useListHeld();
@@ -767,7 +1156,6 @@ function OrderManagement() {
   const markAllClearMutation = useMarkAllClear();
   const unmarkAllClearMutation = useUnmarkAllClear();
 
-  const [registering, setRegistering] = useState(false);
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [holdActionPending, setHoldActionPending] = useState<bigint | null>(
     null,
@@ -776,35 +1164,8 @@ function OrderManagement() {
     bigint | null
   >(null);
 
-  const currentUser = currentUserQuery.data;
   const roles = rolesQuery.data ?? [];
   const stages = stagesQuery.data ?? [];
-  const isActorLoading = currentUserQuery.isLoading;
-
-  const needsRegistration =
-    !isActorLoading && currentUser === null && !registering;
-
-  if (isActorLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          <p className="text-sm">Loading…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (needsRegistration) {
-    return (
-      <RegistrationGate
-        onRegistered={() => {
-          setRegistering(true);
-          currentUserQuery.refetch().then(() => setRegistering(false));
-        }}
-      />
-    );
-  }
 
   const userIsAdmin = isAdmin(currentUser);
   const userIsManagerOrAdmin = isManagerOrAdmin(currentUser);
@@ -812,7 +1173,7 @@ function OrderManagement() {
   const handleHoldAction = async (order: Order) => {
     setHoldActionPending(order.id);
     try {
-      if (order.holdFlag) {
+      if (order.isHeld) {
         await unmarkHoldMutation.mutateAsync(order.id);
         toast.success("Hold removed");
       } else {
@@ -829,7 +1190,7 @@ function OrderManagement() {
   const handleAllClearAction = async (order: Order) => {
     setAllClearActionPending(order.id);
     try {
-      if (order.allClearFlag) {
+      if (order.isAllClear) {
         await unmarkAllClearMutation.mutateAsync(order.id);
         toast.success("All-clear removed");
       } else {
@@ -889,52 +1250,47 @@ function OrderManagement() {
           <ScrollText className="w-3.5 h-3.5" />
           Payment
         </TabsTrigger>
-        {userIsAdmin && (
-          <>
-            <TabsTrigger
-              value="stages"
-              data-ocid="app.stages.tab"
-              className="h-7 text-sm gap-1.5"
-            >
-              <Layers className="w-3.5 h-3.5" />
-              Stages
-              <Shield className="w-3 h-3 text-primary" />
-            </TabsTrigger>
-            <TabsTrigger
-              value="audit"
-              data-ocid="app.audit.tab"
-              className="h-7 text-sm gap-1.5"
-            >
-              <ScrollText className="w-3.5 h-3.5" />
-              Audit Log
-              <Shield className="w-3 h-3 text-primary" />
-            </TabsTrigger>
-            <TabsTrigger
-              value="settings"
-              data-ocid="app.settings.tab"
-              className="h-7 text-sm gap-1.5"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              Settings
-              <Shield className="w-3 h-3 text-primary" />
-            </TabsTrigger>
-            <TabsTrigger
-              value="users"
-              data-ocid="app.users.tab"
-              className="h-7 text-sm gap-1.5"
-            >
-              <Users className="w-3.5 h-3.5" />
-              Users
-              <Shield className="w-3 h-3 text-primary" />
-            </TabsTrigger>
-          </>
-        )}
+        <TabsTrigger
+          value="stages"
+          data-ocid="app.stages.tab"
+          className="h-7 text-sm gap-1.5"
+        >
+          <Layers className="w-3.5 h-3.5" />
+          Stages
+          <Shield className="w-3 h-3 text-primary" />
+        </TabsTrigger>
+        <TabsTrigger
+          value="audit"
+          data-ocid="app.audit.tab"
+          className="h-7 text-sm gap-1.5"
+        >
+          <ScrollText className="w-3.5 h-3.5" />
+          Audit Log
+          <Shield className="w-3 h-3 text-primary" />
+        </TabsTrigger>
+        <TabsTrigger
+          value="settings"
+          data-ocid="app.settings.tab"
+          className="h-7 text-sm gap-1.5"
+        >
+          <Settings className="w-3.5 h-3.5" />
+          Settings
+          <Shield className="w-3 h-3 text-primary" />
+        </TabsTrigger>
+        <TabsTrigger
+          value="users"
+          data-ocid="app.users.tab"
+          className="h-7 text-sm gap-1.5"
+        >
+          <Users className="w-3.5 h-3.5" />
+          Users
+          <Shield className="w-3 h-3 text-primary" />
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="orders">
         <OrdersTab currentUser={currentUser} onViewDetail={setDetailOrder} />
       </TabsContent>
-
       <TabsContent value="pending">
         <OrderFilterTab
           title="Pending Orders"
@@ -944,7 +1300,6 @@ function OrderManagement() {
           onViewDetail={setDetailOrder}
         />
       </TabsContent>
-
       <TabsContent value="held">
         <OrderFilterTab
           title="Held Orders"
@@ -957,7 +1312,6 @@ function OrderManagement() {
           actionPending={holdActionPending}
         />
       </TabsContent>
-
       <TabsContent value="allclear">
         <OrderFilterTab
           title="All Clear Orders"
@@ -970,31 +1324,25 @@ function OrderManagement() {
           actionPending={allClearActionPending}
         />
       </TabsContent>
-
       <TabsContent value="payment">
         <PaymentTab currentUser={currentUser} onViewDetail={setDetailOrder} />
       </TabsContent>
-
-      {userIsAdmin && (
-        <>
-          <TabsContent value="stages">
-            <StagesTab
-              stages={stages}
-              isLoading={stagesQuery.isLoading}
-              roles={roles}
-            />
-          </TabsContent>
-          <TabsContent value="audit">
-            <AuditLogTab />
-          </TabsContent>
-          <TabsContent value="settings">
-            <SettingsTab />
-          </TabsContent>
-          <TabsContent value="users">
-            <UsersTab />
-          </TabsContent>
-        </>
-      )}
+      <TabsContent value="stages">
+        <StagesTab
+          stages={stages}
+          isLoading={stagesQuery.isLoading}
+          roles={roles}
+        />
+      </TabsContent>
+      <TabsContent value="audit">
+        <AuditLogTab />
+      </TabsContent>
+      <TabsContent value="settings">
+        <SettingsTab />
+      </TabsContent>
+      <TabsContent value="users">
+        <UsersTab />
+      </TabsContent>
     </Tabs>
   );
 
@@ -1100,7 +1448,9 @@ function OrderManagement() {
                 </p>
               </div>
             </div>
-            {currentUser && <UserChip user={currentUser} roles={roles} />}
+            {currentUser && (
+              <UserChip user={currentUser} roles={roles} onLogout={logout} />
+            )}
           </div>
         </header>
 
@@ -1137,18 +1487,47 @@ function OrderManagement() {
   );
 }
 
+// ─── Root ──────────────────────────────────────────────────────────────────
+function AppRoot() {
+  const { currentUser, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <p className="text-sm">Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <LoginPage onLoggedIn={() => {}} />;
+  }
+
+  return <OrderManagement />;
+}
+
+function AuthProvider({ children }: { children: React.ReactNode }) {
+  const auth = useAuthProvider();
+  return <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <OrderManagement />
-      <Toaster
-        position="bottom-right"
-        toastOptions={{
-          classNames: {
-            toast: "bg-card border-border text-foreground font-sans",
-          },
-        }}
-      />
+      <AuthProvider>
+        <AppRoot />
+        <Toaster
+          position="bottom-right"
+          toastOptions={{
+            classNames: {
+              toast: "bg-card border-border text-foreground font-sans",
+            },
+          }}
+        />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

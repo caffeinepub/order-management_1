@@ -14,6 +14,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 import type { AppRole, AppUser, Order, Stage } from "../backend.d";
 import {
+  type OrderStage,
+  type OrderUpdate,
   useAddUpdate,
   useCompleteStage,
   useListOrderStages,
@@ -29,7 +31,7 @@ function hasRoleIntersection(
 }
 
 function isManagerOrAdmin(user: AppUser | null | undefined): boolean {
-  return !!user?.roleIds.some((id) => id === 1n || id === 2n);
+  return !!user?.roles.some((id) => id === 1n || id === 2n);
 }
 
 function getStatusClass(status: string): string {
@@ -47,27 +49,19 @@ function getStatusClass(status: string): string {
   }
 }
 
-interface StageRowProps {
-  stage: Stage;
-  orderId: bigint;
-  completed: boolean;
-  completedDate: string;
-  manualDateOverride: string;
-  note: string;
-  currentUser: AppUser | null | undefined;
-  index: number;
-}
-
 function StageRow({
   stage,
   orderId,
-  completed,
-  completedDate,
-  manualDateOverride,
-  note,
+  orderStage,
   currentUser,
   index,
-}: StageRowProps) {
+}: {
+  stage: Stage;
+  orderId: bigint;
+  orderStage: OrderStage | undefined;
+  currentUser: AppUser | null | undefined;
+  index: number;
+}) {
   const [showComplete, setShowComplete] = useState(false);
   const [showOverride, setShowOverride] = useState(false);
   const [completeNote, setCompleteNote] = useState("");
@@ -77,12 +71,14 @@ function StageRow({
   const completeStageMutation = useCompleteStage();
   const overrideStageDateMutation = useOverrideStageDate();
 
+  const completed = orderStage?.completed ?? false;
   const canComplete =
     !completed &&
     !!currentUser &&
-    hasRoleIntersection(currentUser.roleIds, stage.roleIds);
+    hasRoleIntersection(currentUser.roles, stage.assignedRoles);
   const canOverride = isManagerOrAdmin(currentUser);
-  const displayDate = manualDateOverride || completedDate;
+  const displayDate =
+    orderStage?.manualDateOverride || orderStage?.completedDate || "";
 
   const handleComplete = async () => {
     try {
@@ -91,7 +87,7 @@ function StageRow({
         stageId: stage.id,
         note: completeNote,
       });
-      toast.success(`Stage "${stage.stageName}" completed`);
+      toast.success(`Stage "${stage.name}" completed`);
       setShowComplete(false);
       setCompleteNote("");
     } catch {
@@ -110,8 +106,6 @@ function StageRow({
       });
       toast.success("Date overridden");
       setShowOverride(false);
-      setOverrideDate("");
-      setOverrideNote("");
     } catch {
       toast.error("Failed to override date");
     }
@@ -131,17 +125,17 @@ function StageRow({
           )}
           <div className="min-w-0">
             <p className="text-sm font-medium text-foreground truncate">
-              {stage.stageName}
+              {stage.name}
             </p>
             {completed && displayDate && (
               <p className="text-xs text-muted-foreground">
-                {manualDateOverride ? "Override: " : ""}
+                {orderStage?.manualDateOverride ? "Override: " : ""}
                 {displayDate}
               </p>
             )}
-            {completed && note && (
+            {completed && orderStage?.note && (
               <p className="text-xs text-muted-foreground/70 italic truncate">
-                {note}
+                {orderStage.note}
               </p>
             )}
           </div>
@@ -169,7 +163,6 @@ function StageRow({
           )}
         </div>
       </div>
-
       {showComplete && (
         <div className="ml-6 space-y-2 p-3 bg-muted/30 rounded-sm border border-border">
           <Textarea
@@ -187,7 +180,7 @@ function StageRow({
             >
               {completeStageMutation.isPending && (
                 <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              )}
+              )}{" "}
               Confirm
             </Button>
             <Button
@@ -201,7 +194,6 @@ function StageRow({
           </div>
         </div>
       )}
-
       {showOverride && (
         <div className="ml-6 space-y-2 p-3 bg-muted/30 rounded-sm border border-border">
           <input
@@ -225,7 +217,7 @@ function StageRow({
             >
               {overrideStageDateMutation.isPending && (
                 <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              )}
+              )}{" "}
               Save
             </Button>
             <Button
@@ -243,21 +235,19 @@ function StageRow({
   );
 }
 
-interface OrderDetailDrawerProps {
-  order: Order | null;
-  onClose: () => void;
-  currentUser: AppUser | null | undefined;
-  roles: AppRole[];
-  stages: Stage[];
-}
-
 export function OrderDetailDrawer({
   order,
   onClose,
   currentUser,
   roles: _roles,
   stages,
-}: OrderDetailDrawerProps) {
+}: {
+  order: Order | null;
+  onClose: () => void;
+  currentUser: AppUser | null | undefined;
+  roles: AppRole[];
+  stages: Stage[];
+}) {
   const [updateText, setUpdateText] = useState("");
 
   const orderStagesQuery = useListOrderStages(order?.id ?? null);
@@ -265,11 +255,10 @@ export function OrderDetailDrawer({
   const addUpdateMutation = useAddUpdate();
 
   const sortedStages = [...stages].sort(
-    (a, b) => Number(a.stageOrder) - Number(b.stageOrder),
+    (a, b) => Number(a.orderIndex) - Number(b.orderIndex),
   );
-
   const getOrderStage = (stageId: bigint) =>
-    orderStagesQuery.data?.find((os) => os.stageId === stageId);
+    orderStagesQuery.data?.find((os: OrderStage) => os.stageId === stageId);
 
   const handleAddUpdate = async () => {
     if (!order || !updateText.trim()) return;
@@ -285,7 +274,7 @@ export function OrderDetailDrawer({
     }
   };
 
-  const sortedUpdates = [...(updatesQuery.data ?? [])].sort(
+  const sortedUpdates = [...((updatesQuery.data ?? []) as OrderUpdate[])].sort(
     (a, b) => Number(b.createdAt) - Number(a.createdAt),
   );
 
@@ -314,17 +303,15 @@ export function OrderDetailDrawer({
                 >
                   {order.status}
                 </span>
-                {order.holdFlag && (
+                {order.isHeld && (
                   <PauseCircle className="w-3.5 h-3.5 text-yellow-400" />
                 )}
-                {order.allClearFlag && (
+                {order.isAllClear && (
                   <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
                 )}
               </div>
             </SheetHeader>
-
             <ScrollArea className="flex-1 px-6">
-              {/* Stage Progress */}
               <div className="py-5">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
                   Stage Progress
@@ -341,34 +328,24 @@ export function OrderDetailDrawer({
                   </p>
                 ) : (
                   <div className="divide-y divide-border">
-                    {sortedStages.map((stage, idx) => {
-                      const os = getOrderStage(stage.id);
-                      return (
-                        <StageRow
-                          key={stage.id.toString()}
-                          stage={stage}
-                          orderId={order.id}
-                          completed={os?.completed ?? false}
-                          completedDate={os?.completedDate ?? ""}
-                          manualDateOverride={os?.manualDateOverride ?? ""}
-                          note={os?.note ?? ""}
-                          currentUser={currentUser}
-                          index={idx + 1}
-                        />
-                      );
-                    })}
+                    {sortedStages.map((stage, idx) => (
+                      <StageRow
+                        key={stage.id.toString()}
+                        stage={stage}
+                        orderId={order.id}
+                        orderStage={getOrderStage(stage.id)}
+                        currentUser={currentUser}
+                        index={idx + 1}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
-
               <Separator className="bg-border" />
-
-              {/* Updates Feed */}
               <div className="py-5">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
                   Updates
                 </h3>
-
                 <div className="space-y-1 mb-4 max-h-48 overflow-y-auto">
                   {updatesQuery.isLoading ? (
                     <Skeleton className="h-16 w-full bg-muted/40" />
@@ -384,13 +361,12 @@ export function OrderDetailDrawer({
                       >
                         <p className="text-xs text-foreground">{upd.text}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {upd.createdBy.toString().slice(0, 12)}…
+                          {upd.createdBy.toString().slice(0, 12)}\u2026
                         </p>
                       </div>
                     ))
                   )}
                 </div>
-
                 <div className="space-y-2">
                   <Textarea
                     data-ocid="order.detail.update.input"

@@ -1,14 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type {
-  AppRole,
-  AppUser,
-  AuditEntry,
-  Order,
-  OrderStage,
-  OrderUpdate,
-  Stage,
-} from "../backend.d";
+import type { AppRole, AppUser, AuditEntry, Order, Stage } from "../backend.d";
 import { useActor } from "./useActor";
+
+// Local types not in backend.d.ts
+export interface OrderStage {
+  stageId: bigint;
+  orderId: bigint;
+  completed: boolean;
+  completedDate: string;
+  manualDateOverride: string;
+  note: string;
+}
+
+export interface OrderUpdate {
+  id: bigint;
+  text: string;
+  createdBy: { toString(): string };
+  createdAt: bigint;
+}
 
 export function useListOrders(page: number, pageSize: number) {
   const { actor, isFetching } = useActor();
@@ -28,67 +37,90 @@ export function useSearchOrders(query: string) {
     queryKey: ["orders", "search", query],
     queryFn: async () => {
       if (!actor || !query.trim()) return [] as Order[];
-      return actor.searchOrders(query.trim());
+      return (actor as any).searchOrders(query.trim()) as Promise<Order[]>;
     },
     enabled: !!actor && !isFetching && query.trim().length > 0,
   });
+}
+
+export interface CreateOrderData {
+  orderId: string;
+  consumerNo: string;
+  contactNo: string;
+  customerName: string;
+  address: string;
+  orderDate: string;
+  expectedDelivery: string;
+  product: string;
+  quantity: bigint;
+  amount: number;
 }
 
 export function useCreateOrder() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data: {
-      consumerNo: string;
-      contactNo: string;
-      customerName: string;
-      address: string;
-      product: string;
-      amountText: string;
-      expectedPaymentDate: string;
-    }) => {
+    mutationFn: async (data: CreateOrderData) => {
       if (!actor) throw new Error("Actor not ready");
       return actor.createOrder(
+        data.orderId,
         data.consumerNo,
         data.contactNo,
         data.customerName,
         data.address,
+        data.orderDate,
+        data.expectedDelivery,
         data.product,
-        data.amountText,
-        data.expectedPaymentDate,
+        data.quantity,
+        data.amount,
       );
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });
 }
 
+export interface UpdateOrderData {
+  id: bigint;
+  orderId: string;
+  consumerNo: string;
+  contactNo: string;
+  customerName: string;
+  address: string;
+  orderDate: string;
+  expectedDelivery: string;
+  product: string;
+  quantity: bigint;
+  amount: number;
+  status: string;
+  paymentStatus: string;
+  paymentDate: string;
+  collectDate: string;
+  notes: string;
+}
+
 export function useUpdateOrder() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data: {
-      id: bigint;
-      consumerNo: string;
-      contactNo: string;
-      customerName: string;
-      address: string;
-      product: string;
-      amountText: string;
-      expectedPaymentDate: string;
-      status: string;
-    }) => {
+    mutationFn: async (data: UpdateOrderData) => {
       if (!actor) throw new Error("Actor not ready");
-      return actor.updateOrder(
-        data.id,
-        data.consumerNo,
-        data.contactNo,
-        data.customerName,
-        data.address,
-        data.product,
-        data.amountText,
-        data.expectedPaymentDate,
-        data.status,
-      );
+      return actor.updateOrder(data.id, {
+        orderId: data.orderId,
+        consumerNo: data.consumerNo,
+        contactNo: data.contactNo,
+        customerName: data.customerName,
+        address: data.address,
+        orderDate: data.orderDate,
+        expectedDelivery: data.expectedDelivery,
+        product: data.product,
+        quantity: data.quantity,
+        amount: data.amount,
+        status: data.status,
+        paymentStatus: data.paymentStatus,
+        paymentDate: data.paymentDate,
+        collectDate: data.collectDate,
+        notes: data.notes,
+      });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });
@@ -100,7 +132,7 @@ export function useDeleteOrder() {
   return useMutation({
     mutationFn: async (id: bigint) => {
       if (!actor) throw new Error("Actor not ready");
-      return actor.deleteOrder(id);
+      return (actor as any).deleteOrder(id) as Promise<void>;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });
@@ -112,7 +144,7 @@ export function useSetHoldFlag() {
   return useMutation({
     mutationFn: async ({ id, value }: { id: bigint; value: boolean }) => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).setHoldFlag(id, value) as Promise<boolean>;
+      return actor.setHoldFlag(id, value);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });
@@ -124,21 +156,19 @@ export function useSetAllClearFlag() {
   return useMutation({
     mutationFn: async ({ id, value }: { id: bigint; value: boolean }) => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).setAllClearFlag(id, value) as Promise<boolean>;
+      return actor.setAllClearFlag(id, value);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });
 }
 
-// ─── Hold / AllClear ───────────────────────────────────────────────────────
-
 export function useMarkHold() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (orderId: bigint): Promise<string> => {
+    mutationFn: async (orderId: bigint) => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).markHold(orderId);
+      return (actor as any).markHold(orderId) as Promise<void>;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });
@@ -148,9 +178,9 @@ export function useUnmarkHold() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (orderId: bigint): Promise<string> => {
+    mutationFn: async (orderId: bigint) => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).unmarkHold(orderId);
+      return (actor as any).unmarkHold(orderId) as Promise<void>;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });
@@ -162,7 +192,7 @@ export function useListHeld() {
     queryKey: ["orders", "held"],
     queryFn: async (): Promise<Order[]> => {
       if (!actor) return [];
-      return (actor as any).listHeld();
+      return (actor as any).listHeld() as Promise<Order[]>;
     },
     enabled: !!actor && !isFetching,
   });
@@ -172,9 +202,9 @@ export function useMarkAllClear() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (orderId: bigint): Promise<string> => {
+    mutationFn: async (orderId: bigint) => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).markAllClear(orderId);
+      return (actor as any).markAllClear(orderId) as Promise<void>;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });
@@ -184,9 +214,9 @@ export function useUnmarkAllClear() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (orderId: bigint): Promise<string> => {
+    mutationFn: async (orderId: bigint) => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).unmarkAllClear(orderId);
+      return (actor as any).unmarkAllClear(orderId) as Promise<void>;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });
@@ -198,13 +228,11 @@ export function useListAllClear() {
     queryKey: ["orders", "allclear"],
     queryFn: async (): Promise<Order[]> => {
       if (!actor) return [];
-      return (actor as any).listAllClear();
+      return (actor as any).listAllClear() as Promise<Order[]>;
     },
     enabled: !!actor && !isFetching,
   });
 }
-
-// ─── Pending & Payment ─────────────────────────────────────────────────────
 
 export function useListPending() {
   const { actor, isFetching } = useActor();
@@ -212,7 +240,7 @@ export function useListPending() {
     queryKey: ["orders", "pending"],
     queryFn: async (): Promise<Order[]> => {
       if (!actor) return [];
-      return (actor as any).listPending();
+      return (actor as any).listPending() as Promise<Order[]>;
     },
     enabled: !!actor && !isFetching,
   });
@@ -224,7 +252,7 @@ export function useListExpectedPayment() {
     queryKey: ["orders", "expected-payment"],
     queryFn: async (): Promise<Order[]> => {
       if (!actor) return [];
-      return (actor as any).listExpectedPayment();
+      return (actor as any).listExpectedPayment() as Promise<Order[]>;
     },
     enabled: !!actor && !isFetching,
   });
@@ -236,13 +264,11 @@ export function useListCollectToday(today: string) {
     queryKey: ["orders", "collect-today", today],
     queryFn: async (): Promise<Order[]> => {
       if (!actor) return [];
-      return (actor as any).listCollectToday(today);
+      return (actor as any).listCollectToday(today) as Promise<Order[]>;
     },
     enabled: !!actor && !isFetching,
   });
 }
-
-// ─── Stage APIs ────────────────────────────────────────────────────────────
 
 export function useListStages() {
   const { actor, isFetching } = useActor();
@@ -250,7 +276,7 @@ export function useListStages() {
     queryKey: ["stages"],
     queryFn: async (): Promise<Stage[]> => {
       if (!actor) return [];
-      return (actor as any).listStages();
+      return actor.listStages();
     },
     enabled: !!actor && !isFetching,
   });
@@ -262,11 +288,17 @@ export function useCreateStage() {
   return useMutation({
     mutationFn: async (data: {
       name: string;
-      order: bigint;
-      roleIds: bigint[];
-    }): Promise<string> => {
+      orderIndex: bigint;
+      assignedRoles: bigint[];
+      sfaEnabled: boolean;
+    }) => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).createStage(data.name, data.order, data.roleIds);
+      return actor.createStage(
+        data.name,
+        data.orderIndex,
+        data.assignedRoles,
+        data.sfaEnabled,
+      );
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["stages"] }),
   });
@@ -279,16 +311,17 @@ export function useUpdateStage() {
     mutationFn: async (data: {
       id: bigint;
       name: string;
-      order: bigint;
-      roleIds: bigint[];
-    }): Promise<string> => {
+      orderIndex: bigint;
+      assignedRoles: bigint[];
+      sfaEnabled: boolean;
+    }) => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).updateStage(
-        data.id,
-        data.name,
-        data.order,
-        data.roleIds,
-      );
+      return actor.updateStage(data.id, {
+        name: data.name,
+        orderIndex: data.orderIndex,
+        assignedRoles: data.assignedRoles,
+        sfaEnabled: data.sfaEnabled,
+      });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["stages"] }),
   });
@@ -298,9 +331,9 @@ export function useDeleteStage() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: bigint): Promise<string> => {
+    mutationFn: async (id: bigint) => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).deleteStage(id);
+      return (actor as any).deleteStage(id) as Promise<void>;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["stages"] }),
   });
@@ -314,13 +347,13 @@ export function useCompleteStage() {
       orderId: bigint;
       stageId: bigint;
       note: string;
-    }): Promise<string> => {
+    }) => {
       if (!actor) throw new Error("Actor not ready");
       return (actor as any).completeStage(
         data.orderId,
         data.stageId,
         data.note,
-      );
+      ) as Promise<void>;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orderStages"] }),
   });
@@ -335,14 +368,14 @@ export function useOverrideStageDate() {
       stageId: bigint;
       date: string;
       note: string;
-    }): Promise<string> => {
+    }) => {
       if (!actor) throw new Error("Actor not ready");
       return (actor as any).overrideStageDate(
         data.orderId,
         data.stageId,
         data.date,
         data.note,
-      );
+      ) as Promise<void>;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orderStages"] }),
   });
@@ -354,24 +387,19 @@ export function useListOrderStages(orderId: bigint | null) {
     queryKey: ["orderStages", orderId?.toString()],
     queryFn: async (): Promise<OrderStage[]> => {
       if (!actor || orderId === null) return [];
-      return (actor as any).listOrderStages(orderId);
+      return (actor as any).listOrderStages(orderId) as Promise<OrderStage[]>;
     },
     enabled: !!actor && !isFetching && orderId !== null,
   });
 }
 
-// ─── Updates Feed ──────────────────────────────────────────────────────────
-
 export function useAddUpdate() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data: {
-      orderId: bigint;
-      text: string;
-    }): Promise<string> => {
+    mutationFn: async (data: { orderId: bigint; text: string }) => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).addUpdate(data.orderId, data.text);
+      return (actor as any).addUpdate(data.orderId, data.text) as Promise<void>;
     },
     onSuccess: (_data, vars) =>
       qc.invalidateQueries({
@@ -386,13 +414,11 @@ export function useListUpdates(orderId: bigint | null) {
     queryKey: ["orderUpdates", orderId?.toString()],
     queryFn: async (): Promise<OrderUpdate[]> => {
       if (!actor || orderId === null) return [];
-      return (actor as any).listUpdates(orderId);
+      return (actor as any).listUpdates(orderId) as Promise<OrderUpdate[]>;
     },
     enabled: !!actor && !isFetching && orderId !== null,
   });
 }
-
-// ─── Audit ─────────────────────────────────────────────────────────────────
 
 export function useListAuditLog() {
   const { actor, isFetching } = useActor();
@@ -400,13 +426,31 @@ export function useListAuditLog() {
     queryKey: ["audit"],
     queryFn: async (): Promise<AuditEntry[]> => {
       if (!actor) return [];
-      return (actor as any).listAuditLog();
+      return actor.listAuditLog(BigInt(200), "");
     },
     enabled: !!actor && !isFetching,
   });
 }
 
-// ─── Settings ──────────────────────────────────────────────────────────────
+export function useAppendAudit() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async (data: {
+      action: string;
+      entityType: string;
+      entityId: string;
+      details: string;
+    }) => {
+      if (!actor) return;
+      return actor.appendAudit(
+        data.action,
+        data.entityType,
+        data.entityId,
+        data.details,
+      );
+    },
+  });
+}
 
 export function useGetSetting(key: string) {
   const { actor, isFetching } = useActor();
@@ -414,7 +458,7 @@ export function useGetSetting(key: string) {
     queryKey: ["settings", key],
     queryFn: async (): Promise<string | null> => {
       if (!actor) return null;
-      return (actor as any).getSetting(key);
+      return actor.getSetting(key);
     },
     enabled: !!actor && !isFetching,
     staleTime: 60_000,
@@ -425,19 +469,14 @@ export function useSetSetting() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data: {
-      key: string;
-      value: string;
-    }): Promise<string> => {
+    mutationFn: async (data: { key: string; value: string }) => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).setSetting(data.key, data.value);
+      return actor.setSetting(data.key, data.value);
     },
     onSuccess: (_data, vars) =>
       qc.invalidateQueries({ queryKey: ["settings", vars.key] }),
   });
 }
-
-// ─── User / Role Queries ───────────────────────────────────────────────────
 
 export function useGetCurrentUser() {
   const { actor, isFetching } = useActor();
@@ -445,7 +484,7 @@ export function useGetCurrentUser() {
     queryKey: ["auth", "currentUser"],
     queryFn: async (): Promise<AppUser | null> => {
       if (!actor) return null;
-      return (actor as any).getCurrentUser();
+      return actor.getCurrentUser();
     },
     enabled: !!actor && !isFetching,
     staleTime: 30_000,
@@ -458,7 +497,7 @@ export function useListRoles() {
     queryKey: ["roles"],
     queryFn: async (): Promise<AppRole[]> => {
       if (!actor) return [];
-      return (actor as any).listRoles();
+      return actor.listRoles();
     },
     enabled: !!actor && !isFetching,
     staleTime: 60_000,
@@ -471,7 +510,7 @@ export function useListUsers() {
     queryKey: ["users"],
     queryFn: async (): Promise<AppUser[]> => {
       if (!actor) return [];
-      return (actor as any).listUsers();
+      return actor.listUsers();
     },
     enabled: !!actor && !isFetching,
   });
@@ -483,7 +522,8 @@ export function useRegisterSelf() {
   return useMutation({
     mutationFn: async (username: string): Promise<string> => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).registerSelf(username);
+      const id = await actor.registerSelf(username);
+      return id.toString();
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["auth"] }),
   });
@@ -496,12 +536,9 @@ export function useAssignRoles() {
     mutationFn: async ({
       userId,
       roleIds,
-    }: {
-      userId: bigint;
-      roleIds: bigint[];
-    }): Promise<string> => {
+    }: { userId: bigint; roleIds: bigint[] }) => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).assignRoles(userId, roleIds);
+      return actor.assignRoles(userId, roleIds);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
@@ -511,9 +548,9 @@ export function useDeleteUser() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (userId: bigint): Promise<string> => {
+    mutationFn: async (userId: bigint) => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).deleteUser(userId);
+      return actor.deleteUser(userId);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
@@ -523,15 +560,9 @@ export function useCreateRole() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      name,
-      desc,
-    }: {
-      name: string;
-      desc: string;
-    }): Promise<string> => {
+    mutationFn: async ({ name, desc }: { name: string; desc: string }) => {
       if (!actor) throw new Error("Actor not ready");
-      return (actor as any).createRole(name, desc);
+      return actor.createRole(name, desc);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["roles"] }),
   });

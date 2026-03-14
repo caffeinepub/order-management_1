@@ -89,76 +89,232 @@ export class ExternalBlob {
         return this;
     }
 }
+export interface Stage {
+    id: bigint;
+    assignedRoles: Array<bigint>;
+    name: string;
+    sfaEnabled: boolean;
+    orderIndex: bigint;
+}
+export interface AuditEntry {
+    id: bigint;
+    action: string;
+    entityId: string;
+    performedBy: Principal;
+    timestamp: bigint;
+    details: string;
+    entityType: string;
+}
+export interface AppRole {
+    id: bigint;
+    name: string;
+    description: string;
+}
 export interface Order {
     id: bigint;
     customerName: string;
     status: string;
-    expectedPaymentDate: string;
-    holdFlag: boolean;
+    paymentStatus: string;
     createdAt: bigint;
     createdBy: Principal;
-    amountText: string;
+    collectDate: string;
+    orderDate: string;
+    isHeld: boolean;
+    orderId: string;
     updatedAt: bigint;
     address: string;
+    notes: string;
+    paymentDate: string;
+    quantity: bigint;
     contactNo: string;
-    allClearFlag: boolean;
+    isAllClear: boolean;
+    expectedDelivery: string;
+    amount: number;
     consumerNo: string;
     product: string;
 }
+export interface AppUser {
+    id: bigint;
+    principal: Principal;
+    username: string;
+    password: string;
+    createdAt: bigint;
+    roles: Array<bigint>;
+}
 export interface backendInterface {
-    createOrder(consumerNo: string, contactNo: string, customerName: string, address: string, product: string, amountText: string, expectedPaymentDate: string): Promise<bigint>;
-    deleteOrder(id: bigint): Promise<boolean>;
-    getOrder(id: bigint): Promise<Order | null>;
+    appendAudit(action: string, entityType: string, entityId: string, details: string): Promise<void>;
+    assignRoles(userId: bigint, roleIds: Array<bigint>): Promise<void>;
+    createOrder(orderId: string, consumerNo: string, contactNo: string, customerName: string, address: string, orderDate: string, expectedDelivery: string, product: string, quantity: bigint, amount: number): Promise<bigint>;
+    createRole(name: string, description: string): Promise<void>;
+    createStage(name: string, orderIndex: bigint, assignedRoles: Array<bigint>, sfaEnabled: boolean): Promise<void>;
+    deleteUser(userId: bigint): Promise<void>;
+    getCurrentUser(): Promise<AppUser | null>;
+    getSetting(key: string): Promise<string | null>;
+    listAuditLog(limit: bigint, filterEntity: string): Promise<Array<AuditEntry>>;
     listOrders(page: bigint, pageSize: bigint): Promise<{
         total: bigint;
         orders: Array<Order>;
     }>;
-    searchOrders(searchQuery: string): Promise<Array<Order>>;
-    updateOrder(id: bigint, consumerNo: string, contactNo: string, customerName: string, address: string, product: string, amountText: string, expectedPaymentDate: string, status: string): Promise<boolean>;
+    listRoles(): Promise<Array<AppRole>>;
+    listStages(): Promise<Array<Stage>>;
+    listUsers(): Promise<Array<AppUser>>;
+    loginWithPassword(username: string, password: string): Promise<AppUser | null>;
+    registerSelf(username: string): Promise<bigint>;
+    registerWithPassword(username: string, password: string): Promise<bigint>;
+    setAllClearFlag(orderId: bigint, flag: boolean): Promise<void>;
+    setHoldFlag(orderId: bigint, flag: boolean): Promise<void>;
+    setSetting(key: string, value: string): Promise<void>;
+    updateOrder(id: bigint, fields: {
+        customerName: string;
+        status: string;
+        paymentStatus: string;
+        collectDate: string;
+        orderDate: string;
+        orderId: string;
+        address: string;
+        notes: string;
+        paymentDate: string;
+        quantity: bigint;
+        contactNo: string;
+        expectedDelivery: string;
+        amount: number;
+        consumerNo: string;
+        product: string;
+    }): Promise<void>;
+    updateStage(id: bigint, fields: {
+        assignedRoles: Array<bigint>;
+        name: string;
+        sfaEnabled: boolean;
+        orderIndex: bigint;
+    }): Promise<void>;
 }
-import type { Order as _Order } from "./declarations/backend.did.d.ts";
+import type { AppUser as _AppUser } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
-    async createOrder(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: string): Promise<bigint> {
+    async appendAudit(arg0: string, arg1: string, arg2: string, arg3: string): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.createOrder(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
+                const result = await this.actor.appendAudit(arg0, arg1, arg2, arg3);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createOrder(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
+            const result = await this.actor.appendAudit(arg0, arg1, arg2, arg3);
             return result;
         }
     }
-    async deleteOrder(arg0: bigint): Promise<boolean> {
+    async assignRoles(arg0: bigint, arg1: Array<bigint>): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.deleteOrder(arg0);
+                const result = await this.actor.assignRoles(arg0, arg1);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.deleteOrder(arg0);
+            const result = await this.actor.assignRoles(arg0, arg1);
             return result;
         }
     }
-    async getOrder(arg0: bigint): Promise<Order | null> {
+    async createOrder(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: string, arg7: string, arg8: bigint, arg9: number): Promise<bigint> {
         if (this.processError) {
             try {
-                const result = await this.actor.getOrder(arg0);
+                const result = await this.actor.createOrder(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createOrder(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+            return result;
+        }
+    }
+    async createRole(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createRole(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createRole(arg0, arg1);
+            return result;
+        }
+    }
+    async createStage(arg0: string, arg1: bigint, arg2: Array<bigint>, arg3: boolean): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createStage(arg0, arg1, arg2, arg3);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createStage(arg0, arg1, arg2, arg3);
+            return result;
+        }
+    }
+    async deleteUser(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteUser(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteUser(arg0);
+            return result;
+        }
+    }
+    async getCurrentUser(): Promise<AppUser | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getCurrentUser();
                 return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getOrder(arg0);
+            const result = await this.actor.getCurrentUser();
             return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getSetting(arg0: string): Promise<string | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSetting(arg0);
+                return from_candid_opt_n2(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSetting(arg0);
+            return from_candid_opt_n2(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async listAuditLog(arg0: bigint, arg1: string): Promise<Array<AuditEntry>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.listAuditLog(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.listAuditLog(arg0, arg1);
+            return result;
         }
     }
     async listOrders(arg0: bigint, arg1: bigint): Promise<{
@@ -178,36 +334,186 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async searchOrders(arg0: string): Promise<Array<Order>> {
+    async listRoles(): Promise<Array<AppRole>> {
         if (this.processError) {
             try {
-                const result = await this.actor.searchOrders(arg0);
+                const result = await this.actor.listRoles();
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.searchOrders(arg0);
+            const result = await this.actor.listRoles();
             return result;
         }
     }
-    async updateOrder(arg0: bigint, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: string, arg7: string, arg8: string): Promise<boolean> {
+    async listStages(): Promise<Array<Stage>> {
         if (this.processError) {
             try {
-                const result = await this.actor.updateOrder(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+                const result = await this.actor.listStages();
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.updateOrder(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+            const result = await this.actor.listStages();
+            return result;
+        }
+    }
+    async listUsers(): Promise<Array<AppUser>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.listUsers();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.listUsers();
+            return result;
+        }
+    }
+    async loginWithPassword(arg0: string, arg1: string): Promise<AppUser | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.loginWithPassword(arg0, arg1);
+                return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.loginWithPassword(arg0, arg1);
+            return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async registerSelf(arg0: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.registerSelf(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.registerSelf(arg0);
+            return result;
+        }
+    }
+    async registerWithPassword(arg0: string, arg1: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.registerWithPassword(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.registerWithPassword(arg0, arg1);
+            return result;
+        }
+    }
+    async setAllClearFlag(arg0: bigint, arg1: boolean): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setAllClearFlag(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setAllClearFlag(arg0, arg1);
+            return result;
+        }
+    }
+    async setHoldFlag(arg0: bigint, arg1: boolean): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setHoldFlag(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setHoldFlag(arg0, arg1);
+            return result;
+        }
+    }
+    async setSetting(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setSetting(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setSetting(arg0, arg1);
+            return result;
+        }
+    }
+    async updateOrder(arg0: bigint, arg1: {
+        customerName: string;
+        status: string;
+        paymentStatus: string;
+        collectDate: string;
+        orderDate: string;
+        orderId: string;
+        address: string;
+        notes: string;
+        paymentDate: string;
+        quantity: bigint;
+        contactNo: string;
+        expectedDelivery: string;
+        amount: number;
+        consumerNo: string;
+        product: string;
+    }): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateOrder(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateOrder(arg0, arg1);
+            return result;
+        }
+    }
+    async updateStage(arg0: bigint, arg1: {
+        assignedRoles: Array<bigint>;
+        name: string;
+        sfaEnabled: boolean;
+        orderIndex: bigint;
+    }): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateStage(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateStage(arg0, arg1);
             return result;
         }
     }
 }
-function from_candid_opt_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Order]): Order | null {
+function from_candid_opt_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_AppUser]): AppUser | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
 export interface CreateActorOptions {

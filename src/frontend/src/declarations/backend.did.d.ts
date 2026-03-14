@@ -10,37 +10,132 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface AppRole {
+  'id' : bigint,
+  'name' : string,
+  'description' : string,
+}
+export interface AppUser {
+  'id' : bigint,
+  'principal' : Principal,
+  'username' : string,
+  'password' : string,
+  'createdAt' : bigint,
+  'roles' : Array<bigint>,
+}
+export interface AuditEntry {
+  'id' : bigint,
+  'action' : string,
+  'entityId' : string,
+  'performedBy' : Principal,
+  'timestamp' : bigint,
+  'details' : string,
+  'entityType' : string,
+}
 export interface Order {
   'id' : bigint,
   'customerName' : string,
   'status' : string,
-  'expectedPaymentDate' : string,
-  'holdFlag' : boolean,
+  'paymentStatus' : string,
   'createdAt' : bigint,
   'createdBy' : Principal,
-  'amountText' : string,
+  'collectDate' : string,
+  'orderDate' : string,
+  'isHeld' : boolean,
+  'orderId' : string,
   'updatedAt' : bigint,
   'address' : string,
+  'notes' : string,
+  'paymentDate' : string,
+  'quantity' : bigint,
   'contactNo' : string,
-  'allClearFlag' : boolean,
+  'isAllClear' : boolean,
+  'expectedDelivery' : string,
+  'amount' : number,
   'consumerNo' : string,
   'product' : string,
 }
+export interface Stage {
+  'id' : bigint,
+  'assignedRoles' : Array<bigint>,
+  'name' : string,
+  'sfaEnabled' : boolean,
+  'orderIndex' : bigint,
+}
 export interface _SERVICE {
+  'appendAudit' : ActorMethod<[string, string, string, string], undefined>,
+  'assignRoles' : ActorMethod<[bigint, Array<bigint>], undefined>,
   'createOrder' : ActorMethod<
-    [string, string, string, string, string, string, string],
+    [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      bigint,
+      number,
+    ],
     bigint
   >,
-  'deleteOrder' : ActorMethod<[bigint], boolean>,
-  'getOrder' : ActorMethod<[bigint], [] | [Order]>,
+  'createRole' : ActorMethod<[string, string], undefined>,
+  'createStage' : ActorMethod<
+    [string, bigint, Array<bigint>, boolean],
+    undefined
+  >,
+  'deleteUser' : ActorMethod<[bigint], undefined>,
+  'getCurrentUser' : ActorMethod<[], [] | [AppUser]>,
+  'getSetting' : ActorMethod<[string], [] | [string]>,
+  'listAuditLog' : ActorMethod<[bigint, string], Array<AuditEntry>>,
   'listOrders' : ActorMethod<
     [bigint, bigint],
     { 'total' : bigint, 'orders' : Array<Order> }
   >,
-  'searchOrders' : ActorMethod<[string], Array<Order>>,
+  'listRoles' : ActorMethod<[], Array<AppRole>>,
+  'listStages' : ActorMethod<[], Array<Stage>>,
+  'listUsers' : ActorMethod<[], Array<AppUser>>,
+  'loginWithPassword' : ActorMethod<[string, string], [] | [AppUser]>,
+  'registerSelf' : ActorMethod<[string], bigint>,
+  'registerWithPassword' : ActorMethod<[string, string], bigint>,
+  'setAllClearFlag' : ActorMethod<[bigint, boolean], undefined>,
+  'setHoldFlag' : ActorMethod<[bigint, boolean], undefined>,
+  'setSetting' : ActorMethod<[string, string], undefined>,
   'updateOrder' : ActorMethod<
-    [bigint, string, string, string, string, string, string, string, string],
-    boolean
+    [
+      bigint,
+      {
+        'customerName' : string,
+        'status' : string,
+        'paymentStatus' : string,
+        'collectDate' : string,
+        'orderDate' : string,
+        'orderId' : string,
+        'address' : string,
+        'notes' : string,
+        'paymentDate' : string,
+        'quantity' : bigint,
+        'contactNo' : string,
+        'expectedDelivery' : string,
+        'amount' : number,
+        'consumerNo' : string,
+        'product' : string,
+      },
+    ],
+    undefined
+  >,
+  'updateStage' : ActorMethod<
+    [
+      bigint,
+      {
+        'assignedRoles' : Array<bigint>,
+        'name' : string,
+        'sfaEnabled' : boolean,
+        'orderIndex' : bigint,
+      },
+    ],
+    undefined
   >,
 }
 export declare const idlService: IDL.ServiceClass;
