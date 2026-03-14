@@ -1,0 +1,82 @@
+@font-face {
+  font-family: "Bricolage Grotesque";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/assets/fonts/BricolageGrotesque.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Satoshi";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/assets/fonts/Satoshi.woff2") format("woff2");
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0.18 0.005 260;
+    --foreground: 0.95 0.01 100;
+    --card: 0.21 0.008 260;
+    --card-foreground: 0.95 0.01 100;
+    --popover: 0.21 0.008 260;
+    --popover-foreground: 0.95 0.01 100;
+    --primary: 0.78 0.14 75;
+    --primary-foreground: 0.15 0.01 260;
+    --secondary: 0.28 0.01 260;
+    --secondary-foreground: 0.88 0.01 100;
+    --muted: 0.25 0.01 260;
+    --muted-foreground: 0.6 0.02 260;
+    --accent: 0.78 0.14 75;
+    --accent-foreground: 0.15 0.01 260;
+    --destructive: 0.58 0.22 25;
+    --destructive-foreground: 0.98 0.01 100;
+    --border: 0.28 0.01 260;
+    --input: 0.26 0.01 260;
+    --ring: 0.78 0.14 75;
+    --radius: 0.25rem;
+    --chart-1: 0.78 0.14 75;
+    --chart-2: 0.65 0.16 200;
+    --chart-3: 0.58 0.22 25;
+    --chart-4: 0.7 0.12 150;
+    --chart-5: 0.72 0.16 310;
+    --sidebar: 0.16 0.006 260;
+    --sidebar-foreground: 0.95 0.01 100;
+    --sidebar-primary: 0.78 0.14 75;
+    --sidebar-primary-foreground: 0.15 0.01 260;
+    --sidebar-accent: 0.28 0.01 260;
+    --sidebar-accent-foreground: 0.88 0.01 100;
+    --sidebar-border: 0.28 0.01 260;
+    --sidebar-ring: 0.78 0.14 75;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Satoshi", sans-serif;
+    font-size: 14px;
+  }
+}
+
+/* Grid texture overlay for header */
+.grid-texture {
+  background-image: linear-gradient(
+      oklch(0.95 0.01 100 / 0.04) 1px,
+      transparent 1px
+    ), linear-gradient(90deg, oklch(0.95 0.01 100 / 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Subtle row hover */
+.order-row:hover td {
+  background-color: oklch(0.24 0.01 260);
+}
