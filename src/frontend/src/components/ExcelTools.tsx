@@ -302,6 +302,12 @@ interface ParsedOrder {
   product: string;
   quantity: bigint;
   amount: number;
+  // Status fields
+  status: string;
+  paymentStatus: string;
+  collectDate: string;
+  paymentDate: string;
+  notes: string;
 }
 
 function downloadOrderTemplate() {
@@ -317,6 +323,11 @@ function downloadOrderTemplate() {
       Product: "Solar Panel",
       Quantity: 2,
       Amount: 50000,
+      Status: "Pending",
+      "Payment Status": "Unpaid",
+      "Collect Date": "",
+      "Payment Date": "",
+      Notes: "",
     },
   ]);
   const wb = XLSX.utils.book_new();
@@ -389,6 +400,11 @@ export function ImportOrdersButton({
             product: String(row.Product ?? ""),
             quantity: BigInt(Number(row.Quantity ?? 1)),
             amount: Number(row.Amount ?? 0),
+            status: String(row.Status ?? "Pending"),
+            paymentStatus: String(row["Payment Status"] ?? "Unpaid"),
+            collectDate: String(row["Collect Date"] ?? ""),
+            paymentDate: String(row["Payment Date"] ?? ""),
+            notes: String(row.Notes ?? ""),
           });
         });
 
@@ -411,7 +427,7 @@ export function ImportOrdersButton({
     for (let i = 0; i < parsed.length; i++) {
       const row = parsed[i];
       try {
-        await actor.createOrder(
+        const newId = await actor.createOrder(
           row.orderId,
           row.consumerNo,
           row.contactNo,
@@ -423,6 +439,24 @@ export function ImportOrdersButton({
           row.quantity,
           row.amount,
         );
+        // Update the order with status fields that createOrder doesn't accept
+        await actor.updateOrder(newId, {
+          customerName: row.customerName,
+          status: row.status,
+          paymentStatus: row.paymentStatus,
+          collectDate: row.collectDate,
+          orderDate: row.orderDate,
+          orderId: row.orderId,
+          address: row.address,
+          notes: row.notes,
+          paymentDate: row.paymentDate,
+          quantity: row.quantity,
+          contactNo: row.contactNo,
+          expectedDelivery: row.expectedDelivery,
+          amount: row.amount,
+          consumerNo: row.consumerNo,
+          product: row.product,
+        });
         success++;
       } catch {
         errors++;
@@ -520,6 +554,8 @@ export function ImportOrdersButton({
                       <TableHead className="text-xs">Consumer No</TableHead>
                       <TableHead className="text-xs">Customer</TableHead>
                       <TableHead className="text-xs">Product</TableHead>
+                      <TableHead className="text-xs">Status</TableHead>
+                      <TableHead className="text-xs">Payment</TableHead>
                       <TableHead className="text-xs text-right">
                         Amount
                       </TableHead>
@@ -538,6 +574,8 @@ export function ImportOrdersButton({
                         <TableCell>{row.consumerNo}</TableCell>
                         <TableCell>{row.customerName}</TableCell>
                         <TableCell>{row.product}</TableCell>
+                        <TableCell>{row.status}</TableCell>
+                        <TableCell>{row.paymentStatus}</TableCell>
                         <TableCell className="text-right">
                           {row.amount}
                         </TableCell>
@@ -1252,7 +1290,7 @@ export function BackupRestoreSection({
         );
         for (const row of rows) {
           try {
-            await actor.createOrder(
+            const newId = await actor.createOrder(
               String(row["Order ID"] ?? ""),
               String(row["Consumer No"] ?? ""),
               String(row["Contact No"] ?? ""),
@@ -1264,6 +1302,24 @@ export function BackupRestoreSection({
               BigInt(Number(row.Quantity ?? 1)),
               Number(row.Amount ?? 0),
             );
+            // Restore status fields via updateOrder
+            await actor.updateOrder(newId, {
+              customerName: String(row["Customer Name"] ?? ""),
+              status: String(row.Status ?? "Pending"),
+              paymentStatus: String(row["Payment Status"] ?? "Unpaid"),
+              collectDate: String(row["Collect Date"] ?? ""),
+              orderDate: String(row["Order Date"] ?? ""),
+              orderId: String(row["Order ID"] ?? ""),
+              address: String(row.Address ?? ""),
+              notes: String(row.Notes ?? ""),
+              paymentDate: String(row["Payment Date"] ?? ""),
+              quantity: BigInt(Number(row.Quantity ?? 1)),
+              contactNo: String(row["Contact No"] ?? ""),
+              expectedDelivery: String(row["Expected Delivery"] ?? ""),
+              amount: Number(row.Amount ?? 0),
+              consumerNo: String(row["Consumer No"] ?? ""),
+              product: String(row.Product ?? ""),
+            });
             orderCount++;
           } catch {
             /* skip duplicates */
